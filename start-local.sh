@@ -44,7 +44,7 @@ echo "Starting backend on http://localhost:8000"
 (
   cd "$ROOT_DIR"
   source .venv/bin/activate
-  RENDER_SERVICE_URL=http://localhost:3100 uvicorn app:app --host 0.0.0.0 --port 8000
+  RENDER_SERVICE_URL=http://localhost:3100 exec uvicorn app:app --host 0.0.0.0 --port 8000
 ) &
 PIDS+=("$!")
 
@@ -56,7 +56,7 @@ echo "Starting renderer on http://localhost:3100"
   OUTPUT_DIR="$ROOT_DIR/output" \
   REMOTION_BUNDLE_PATH="$ROOT_DIR/remotion" \
   PORT=3100 \
-  npm run dev
+  exec npm run dev
 ) &
 PIDS+=("$!")
 
@@ -65,7 +65,7 @@ sleep 2
 echo "Starting dashboard on http://localhost:5175/#app"
 (
   cd "$ROOT_DIR/dashboard"
-  npm run dev -- --host 0.0.0.0 --port 5175 --strictPort
+  exec npm run dev -- --host 0.0.0.0 --port 5175 --strictPort
 ) &
 PIDS+=("$!")
 
