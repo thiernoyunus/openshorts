@@ -312,16 +312,16 @@ function App() {
           setUploadUserId(data.profiles[0].username);
         }
       } else {
-        alert("No profiles found for this API Key.");
+        console.warn("No Upload-Post profiles found for this API key.");
       }
     } catch (e) {
-      alert("Error fetching User Profiles. Please check key.");
-      console.error(e);
+      console.warn("Upload-Post profile fetch failed. Posting will stay disabled until the key is fixed.", e);
+      setUserProfiles([]);
     }
   };
 
   const handleProcess = async (data) => {
-    if (!apiKey || !uploadPostKey) {
+    if (!apiKey) {
       setShowKeyModal(true);
       return;
     }
@@ -511,10 +511,10 @@ function App() {
               >
                 <AlertTriangle size={12} />
                 {!apiKey && !uploadPostKey
-                  ? 'Gemini & Upload-Post keys missing'
+                  ? 'Gemini key missing'
                   : !apiKey
                     ? 'Gemini API Key Missing'
-                    : 'Upload-Post API Key Missing'}
+                    : 'Posting key optional'}
               </button>
             )}
           </div>
@@ -526,13 +526,13 @@ function App() {
             <div className="flex items-center gap-3 text-sm text-amber-200">
               <KeyRound size={16} className="shrink-0 text-amber-400" />
               <div>
-                <span className="font-semibold">Required API keys missing.</span>{' '}
+                <span className="font-semibold">{!apiKey ? 'Gemini API key required.' : 'Posting is optional.'}</span>{' '}
                 <span className="text-amber-200/80">
                   {!apiKey && !uploadPostKey
-                    ? 'Set your Gemini and Upload-Post API keys to use OpenShorts.'
+                    ? 'Set Gemini to generate clips. Upload-Post is only needed for social publishing.'
                     : !apiKey
-                      ? 'Set your Gemini API key to use OpenShorts.'
-                      : 'Set your Upload-Post API key to use OpenShorts.'}
+                      ? 'Set your Gemini API key to generate clips.'
+                      : 'Add an Upload-Post key only if you want to publish clips directly.'}
                 </span>
               </div>
             </div>
@@ -573,14 +573,14 @@ function App() {
               </div>
               <KeyInput onKeySet={setApiKey} savedKey={apiKey} />
 
-              <div className={`glass-panel p-6 mt-8 ${!uploadPostKey ? 'border-amber-500/30 ring-1 ring-amber-500/20' : ''}`}>
+              <div className="glass-panel p-6 mt-8">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold">Social Integration</h2>
-                  <span className="text-[10px] bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded text-amber-400 uppercase tracking-wider">Required</span>
+                  <span className="text-[10px] bg-zinc-500/10 border border-white/10 px-2 py-0.5 rounded text-zinc-400 uppercase tracking-wider">Optional</span>
                 </div>
                 <p className="text-xs text-zinc-500 mb-6 leading-relaxed">
-                  Required to publish your clips to TikTok, Instagram Reels, and YouTube Shorts via <strong>Upload-Post</strong>.
-                  Includes a <strong>free tier</strong> (no credit card required).
+                  Add an <strong>Upload-Post</strong> key only if you want to publish clips to TikTok, Instagram Reels, or YouTube Shorts directly from OpenShorts.
+                  Clip generation works without it.
                 </p>
                 <div className="space-y-4">
                   <label className="block text-sm text-zinc-400">Upload-Post API Key</label>
@@ -1010,15 +1010,9 @@ function App() {
       {showKeyModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowKeyModal(false)}>
           <div className="bg-[#18181b] border border-white/10 rounded-2xl p-6 max-w-md w-full mx-4 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-white">
-              {!apiKey && !uploadPostKey
-                ? 'Required API Keys Missing'
-                : !apiKey
-                  ? 'Gemini API Key Required'
-                  : 'Upload-Post API Key Required'}
-            </h2>
+            <h2 className="text-lg font-bold text-white">Gemini API Key Required</h2>
             <p className="text-sm text-zinc-400">
-              OpenShorts needs both a <strong className="text-zinc-200">Gemini</strong> API key and an <strong className="text-zinc-200">Upload-Post</strong> API key. Both have free tiers.
+              OpenShorts needs a <strong className="text-zinc-200">Gemini</strong> API key to generate clips. Upload-Post is optional and only used for direct social publishing.
             </p>
 
             {/* Gemini block */}
@@ -1053,12 +1047,12 @@ function App() {
             <div className={`rounded-lg p-4 space-y-2 border ${!uploadPostKey ? 'bg-violet-500/5 border-violet-500/30' : 'bg-white/5 border-white/10 opacity-70'}`}>
               <p className="text-xs font-semibold text-zinc-200 flex items-center gap-2">
                 {uploadPostKey ? <Check size={12} className="text-green-400" /> : <AlertTriangle size={12} className="text-amber-400" />}
-                Upload-Post API Key {uploadPostKey && <span className="text-green-400">— set</span>}
+                Upload-Post API Key <span className="text-zinc-500">— optional</span>{uploadPostKey && <span className="text-green-400">— set</span>}
               </p>
               {!uploadPostKey && (
                 <>
                   <p className="text-xs text-zinc-400">
-                    Required to publish your clips to TikTok, Instagram Reels, and YouTube Shorts. Free tier available, no credit card needed.
+                    Only needed to publish your clips to TikTok, Instagram Reels, and YouTube Shorts from this app.
                   </p>
                   <ol className="text-xs text-zinc-400 space-y-1 list-decimal list-inside">
                     <li>Register at <a href="https://app.upload-post.com/login" target="_blank" rel="noopener noreferrer" className="text-violet-400 underline">app.upload-post.com</a></li>
