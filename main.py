@@ -7,7 +7,6 @@ import re
 import sys
 from scenedetect import open_video, SceneManager
 from scenedetect.detectors import ContentDetector
-from ultralytics import YOLO
 import torch
 import os
 import shutil
@@ -69,8 +68,8 @@ OUTPUT — RETURN ONLY VALID JSON (no markdown, no comments). Order clips by pre
 }}
 """
 
-# Load the YOLO model once (Keep for backup or scene analysis if needed)
-model = YOLO('yolov8n.pt')
+ENABLE_YOLO_FALLBACK = os.environ.get("ENABLE_YOLO_FALLBACK", "false").lower() in ("1", "true", "yes")
+_yolo_model = None
 
 # --- MediaPipe Setup ---
 # Use standard Face Detection (BlazeFace) for speed
@@ -310,8 +309,15 @@ def detect_person_yolo(frame):
     Fallback: Detect largest person using YOLO when face detection fails.
     Returns [x, y, w, h] of the person's 'upper body' approximation.
     """
-    # Use the globally loaded model
-    results = model(frame, verbose=False, classes=[0]) # class 0 is person
+    if not ENABLE_YOLO_FALLBACK:
+        return None
+
+    global _yolo_model
+    if _yolo_model is None:
+        from ultralytics import YOLO
+        _yolo_model = YOLO('yolov8n.pt')
+
+    results = _yolo_model(frame, verbose=False, classes=[0]) # class 0 is person
     
     if not results:
         return None
