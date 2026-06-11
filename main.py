@@ -14,7 +14,6 @@ import tempfile
 import numpy as np
 from tqdm import tqdm
 import yt_dlp
-import mediapipe as mp
 # import whisper (replaced by faster_whisper inside function)
 from google import genai
 from dotenv import load_dotenv
@@ -70,11 +69,17 @@ OUTPUT — RETURN ONLY VALID JSON (no markdown, no comments). Order clips by pre
 
 ENABLE_YOLO_FALLBACK = os.environ.get("ENABLE_YOLO_FALLBACK", "false").lower() in ("1", "true", "yes")
 _yolo_model = None
+_face_detection = None
 
-# --- MediaPipe Setup ---
-# Use standard Face Detection (BlazeFace) for speed
-mp_face_detection = mp.solutions.face_detection
-face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5)
+
+def get_face_detection():
+    """Initialize MediaPipe only when video framing actually needs it."""
+    global _face_detection
+    if _face_detection is None:
+        import mediapipe as mp
+        mp_face_detection = mp.solutions.face_detection
+        _face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5)
+    return _face_detection
 
 class SmoothedCameraman:
     """
@@ -283,7 +288,7 @@ def detect_face_candidates(frame):
     """
     height, width, _ = frame.shape
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = face_detection.process(rgb_frame)
+    results = get_face_detection().process(rgb_frame)
     
     candidates = []
     

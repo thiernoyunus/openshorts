@@ -7,6 +7,7 @@ import shutil
 import glob
 import time
 import asyncio
+import sys
 from dotenv import load_dotenv
 from typing import Dict, Optional, List
 from contextlib import asynccontextmanager
@@ -367,7 +368,7 @@ async def process_endpoint(
     os.makedirs(job_output_dir, exist_ok=True)
 
     # Prepare Command
-    cmd = ["python", "-u", "main.py"] # -u for unbuffered
+    cmd = [sys.executable, "-u", "main.py"] # -u for unbuffered
     env = os.environ.copy()
     env["GEMINI_API_KEY"] = api_key # Override with key from request
 
