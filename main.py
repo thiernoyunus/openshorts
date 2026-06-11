@@ -849,6 +849,20 @@ def is_retryable_gemini_error(error):
     ]
     return any(marker in error_text for marker in retryable_markers)
 
+def get_gemini_retry_delay(error, fallback_seconds):
+    """Use Gemini's suggested retry delay when the API includes one."""
+    error_text = str(error)
+    patterns = [
+        r"'retryDelay':\s*'(\d+(?:\.\d+)?)s'",
+        r'"retryDelay":\s*"(\d+(?:\.\d+)?)s"',
+        r"retry in (\d+(?:\.\d+)?)s",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, error_text, re.IGNORECASE)
+        if match:
+            return min(120, max(1, int(float(match.group(1))) + 1))
+    return fallback_seconds
+
 def get_viral_clips(transcript_result, video_duration, max_retries=3):
     print("🤖  Analyzing with Gemini...")
     
@@ -884,11 +898,6 @@ def get_viral_clips(transcript_result, video_duration, max_retries=3):
     last_error = None
     for attempt in range(1, max_retries + 1):
         try:
-            if attempt > 1:
-                wait_seconds = min(60, 5 * (2 ** (attempt - 2)))
-                print(f"⏳ Gemini retry {attempt}/{max_retries} in {wait_seconds}s...")
-                time.sleep(wait_seconds)
-
             response = client.models.generate_content(
                 model=model_name,
                 contents=prompt
@@ -951,6 +960,11 @@ def get_viral_clips(transcript_result, video_duration, max_retries=3):
             print(f"❌ Gemini attempt {attempt}/{max_retries} failed: {e}")
             if not is_retryable_gemini_error(e):
                 break
+            if attempt < max_retries:
+                fallback_wait = min(60, 5 * (2 ** (attempt - 1)))
+                wait_seconds = get_gemini_retry_delay(e, fallback_wait)
+                print(f"⏳ Gemini retry {attempt + 1}/{max_retries} in {wait_seconds}s...")
+                time.sleep(wait_seconds)
 
     raise ClipAnalysisError(
         "Gemini could not identify clips after retrying. "
