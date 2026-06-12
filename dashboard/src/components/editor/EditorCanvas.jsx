@@ -1,6 +1,7 @@
 import React, { forwardRef, useMemo } from 'react';
 import { Player } from '@remotion/player';
 import { ShortVideo } from '../../remotion/compositions/ShortVideo';
+import TrackerOverlay from './TrackerOverlay';
 
 export const EDITOR_FPS = 30;
 
@@ -9,7 +10,7 @@ export const EDITOR_FPS = 30;
  * composition the export uses, fed the live (possibly edited) framing config.
  */
 const EditorCanvas = forwardRef(function EditorCanvas(
-    { sourceUrl, framing, subtitles = null, durationInFrames },
+    { sourceUrl, framing, subtitles = null, durationInFrames, trackerOn = false, dispatch },
     playerRef
 ) {
     const inputProps = useMemo(
@@ -29,7 +30,7 @@ const EditorCanvas = forwardRef(function EditorCanvas(
     );
 
     return (
-        <div className="h-full aspect-[9/16] rounded-xl overflow-hidden border border-edge bg-black shadow-2xl">
+        <div className="relative h-full aspect-[9/16] rounded-xl overflow-hidden border border-edge bg-black shadow-2xl">
             <Player
                 ref={playerRef}
                 component={ShortVideo}
@@ -42,6 +43,9 @@ const EditorCanvas = forwardRef(function EditorCanvas(
                 clickToPlay={false}
                 spaceKeyToPlayOrPause={false}
             />
+            {trackerOn && (
+                <TrackerOverlay playerRef={playerRef} framing={framing} dispatch={dispatch} />
+            )}
         </div>
     );
 });

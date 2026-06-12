@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Loader2, AlertCircle, LayoutGrid, Captions } from 'lucide-react';
+import { Loader2, AlertCircle, LayoutGrid, Captions, Crosshair } from 'lucide-react';
 import { getApiUrl } from '../../config';
 import useEditorState, { defaultSubtitleConfig } from './useEditorState';
 import EditorTopBar from './EditorTopBar';
@@ -24,6 +24,7 @@ export default function EditorView({ clip, index, jobId, onClose, onExported }) 
     const [exportProgress, setExportProgress] = useState(0);
     const [captions, setCaptions] = useState([]);
     const [activeTab, setActiveTab] = useState('layout'); // layout | captions
+    const [trackerOn, setTrackerOn] = useState(false);
     const playerRef = useRef(null);
 
     const framingUrl = clip.framing_url ? getApiUrl(clip.framing_url) : null;
@@ -279,14 +280,34 @@ export default function EditorView({ clip, index, jobId, onClose, onExported }) 
                         />
 
                         {/* Canvas */}
-                        <div className="flex-1 min-w-0 bg-canvas flex items-center justify-center p-6">
-                            <EditorCanvas
-                                ref={playerRef}
-                                sourceUrl={sourceUrl}
-                                framing={framing}
-                                subtitles={framing.subtitles || null}
-                                durationInFrames={durationInFrames}
-                            />
+                        <div className="flex-1 min-w-0 bg-canvas flex flex-col items-center justify-center gap-3 p-6 min-h-0">
+                            <button
+                                onClick={() => setTrackerOn((v) => !v)}
+                                title="Click a person on the canvas to track them"
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-medium transition-colors shrink-0 ${
+                                    trackerOn
+                                        ? 'bg-viral/20 border-viral/50 text-viral'
+                                        : 'bg-surface2/60 border-edge text-muted hover:text-fg'
+                                }`}
+                            >
+                                <Crosshair size={12} />
+                                Tracker: {trackerOn ? 'ON — click a person' : 'OFF'}
+                            </button>
+                            {/* The absolute box gives EditorCanvas's h-full a definite height
+                                (percentages don't resolve against flex-grown items) */}
+                            <div className="relative flex-1 min-h-0 w-full">
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <EditorCanvas
+                                        ref={playerRef}
+                                        sourceUrl={sourceUrl}
+                                        framing={framing}
+                                        subtitles={framing.subtitles || null}
+                                        durationInFrames={durationInFrames}
+                                        trackerOn={trackerOn}
+                                        dispatch={dispatch}
+                                    />
+                                </div>
+                            </div>
                         </div>
 
                         {/* Tool rail with tabs */}

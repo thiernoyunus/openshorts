@@ -102,6 +102,27 @@ export const editorReducer = (state, action) => {
             });
             return withHistory({ ...state.framing, segments });
         }
+        case 'TRACK_PERSON': {
+            // Tracker click: in multi-panel layouts, reassign the clicked
+            // panel; otherwise (fill/fit/manual) become a fill that follows
+            // the clicked person
+            const segments = state.framing.segments.map((s) => {
+                if (s.id !== action.segmentId) return s;
+                if (['split', 'three', 'four'].includes(s.layout) && !s.manualCrop) {
+                    const faceIds = [...(s.trackedFaceIds || [])];
+                    faceIds[action.panelIdx] = action.trackId;
+                    return { ...s, trackedFaceIds: faceIds };
+                }
+                return {
+                    ...s,
+                    layout: 'fill',
+                    trackedFaceIds: [action.trackId],
+                    cameraKeyframes: action.cameraKeyframes || s.cameraKeyframes,
+                    manualCrop: null,
+                };
+            });
+            return withHistory({ ...state.framing, segments });
+        }
         case 'UNDO': {
             if (state.past.length === 0) return state;
             const previous = state.past[state.past.length - 1];
