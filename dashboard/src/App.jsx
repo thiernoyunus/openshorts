@@ -1148,6 +1148,15 @@ function App() {
           index={editingClip}
           jobId={jobId}
           onClose={() => setEditingClip(null)}
+          onExported={(newVideoUrl) => {
+            setResults((prev) => {
+              if (!prev?.clips?.[editingClip]) return prev;
+              const clips = prev.clips.map((c, i) =>
+                i === editingClip ? { ...c, video_url: newVideoUrl } : c
+              );
+              return { ...prev, clips };
+            });
+          }}
         />
       )}
     </div>

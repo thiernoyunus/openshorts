@@ -12,9 +12,13 @@ import LayoutPanel from './LayoutPanel';
  * Loads the clip's framing.json and 16:9 source, previews the reframe live in
  * a Remotion Player, and lets the user change per-segment layout.
  */
-export default function EditorView({ clip, index, jobId: _jobId, onClose }) {
+export default function EditorView({ clip, index, jobId, onClose, onExported }) {
     const [state, dispatch] = useEditorState();
     const [loadError, setLoadError] = useState(null);
+    const [actionError, setActionError] = useState(null);
+    const [saving, setSaving] = useState(false);
+    const [exporting, setExporting] = useState(false);
+    const [exportProgress, setExportProgress] = useState(0);
     const playerRef = useRef(null);
 
     const framingUrl = clip.framing_url ? getApiUrl(clip.framing_url) : null;
@@ -53,6 +57,107 @@ export default function EditorView({ clip, index, jobId: _jobId, onClose }) {
         onClose();
     }, [state.dirty, onClose]);
 
+    const showError = useCallback((message) => {
+        setActionError(message);
+        setTimeout(() => setActionError(null), 6000);
+    }, []);
+
+    const saveFraming = useCallback(async () => {
+        const res = await fetch(getApiUrl(`/api/clips/${jobId}/${index}/framing`), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(state.framing),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            let detail = text;
+            try {
+                detail = JSON.parse(text).detail || text;
+            } catch { /* plain text */ }
+            throw new Error(`Save failed: ${detail}`);
+        }
+        dispatch({ type: 'MARK_SAVED' });
+    }, [jobId, index, state.framing, dispatch]);
+
+    const handleSave = useCallback(async () => {
+        setSaving(true);
+        try {
+            await saveFraming();
+        } catch (e) {
+            showError(e.message);
+        } finally {
+            setSaving(false);
+        }
+    }, [saveFraming, showError]);
+
+    const handleExport = useCallback(async () => {
+        setExporting(true);
+        setExportProgress(0);
+        try {
+            // Persist the framing first so export and saved state never diverge
+            if (state.dirty) await saveFraming();
+
+            const durationInFrames = Math.max(
+                1,
+                Math.round((state.framing.source.durationFrames / state.framing.source.fps) * EDITOR_FPS)
+            );
+            const res = await fetch(getApiUrl('/render'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jobId,
+                    clipIndex: index,
+                    props: {
+                        videoUrl: clip.video_url || '',
+                        sourceVideoUrl: clip.source_url,
+                        framing: state.framing,
+                        durationInFrames,
+                        fps: EDITOR_FPS,
+                        width: 1080,
+                        height: 1920,
+                        subtitles: null,
+                        hook: null,
+                        effects: null,
+                    },
+                }),
+            });
+            if (!res.ok) throw new Error(`Render service error (${res.status}). Is the renderer running?`);
+            const { renderId } = await res.json();
+
+            // Poll until the render finishes
+            let outputUrl = null;
+            for (;;) {
+                await new Promise((r) => setTimeout(r, 1500));
+                const statusRes = await fetch(getApiUrl(`/render/${renderId}`));
+                if (!statusRes.ok) throw new Error('Lost contact with the render service.');
+                const status = await statusRes.json();
+                setExportProgress(status.progress ?? 0);
+                if (status.status === 'done') {
+                    outputUrl = status.outputUrl;
+                    break;
+                }
+                if (status.status === 'error') {
+                    throw new Error(status.error || 'Render failed.');
+                }
+            }
+
+            // Promote the rendered file to be the clip's video
+            const filename = outputUrl.split('/').pop();
+            const applyRes = await fetch(getApiUrl('/api/clips/apply-render'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ job_id: jobId, clip_index: index, filename }),
+            });
+            if (!applyRes.ok) throw new Error('Render finished but could not be applied to the clip.');
+            const applied = await applyRes.json();
+            onExported?.(applied.new_video_url);
+        } catch (e) {
+            showError(e.message);
+        } finally {
+            setExporting(false);
+        }
+    }, [state.dirty, state.framing, saveFraming, jobId, index, clip, onExported, showError]);
+
     // Esc closes (with the same dirty guard)
     useEffect(() => {
         const onKey = (e) => {
@@ -75,8 +180,19 @@ export default function EditorView({ clip, index, jobId: _jobId, onClose }) {
             <EditorTopBar
                 title={title}
                 dirty={state.dirty}
+                saving={saving}
+                exporting={exporting}
+                exportProgress={exportProgress}
                 onBack={handleBack}
+                onSave={framing ? handleSave : undefined}
+                onExport={framing ? handleExport : undefined}
             />
+
+            {actionError && (
+                <div className="absolute top-16 left-1/2 -translate-x-1/2 z-10 px-4 py-2.5 bg-red-500/15 border border-red-500/30 text-red-300 text-xs rounded-lg flex items-center gap-2 max-w-lg">
+                    <AlertCircle size={13} className="shrink-0" /> {actionError}
+                </div>
+            )}
 
             {loadError ? (
                 <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted p-8 text-center">
@@ -106,6 +222,7 @@ export default function EditorView({ clip, index, jobId: _jobId, onClose }) {
                             framing={framing}
                             selectedIds={state.selectedIds}
                             dispatch={dispatch}
+                            sourceUrl={sourceUrl}
                         />
                     </div>
 

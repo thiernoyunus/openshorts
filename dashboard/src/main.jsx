@@ -10,10 +10,21 @@ import EditorView from './components/editor/EditorView.jsx'
 // fixtures (put demo-source.mp4 + demo.framing.json in
 // dashboard/public/dev-fixtures/ — gitignored). Lets you work on the editor
 // without processing a job first.
-const EDITOR_DEV_FIXTURE = {
-  framing_url: '/dev-fixtures/demo.framing.json',
-  source_url: '/dev-fixtures/demo-source.mp4',
-  video_title_for_youtube_short: 'Editor dev fixture',
+// /?editorDev=backend instead serves the fixture through the API (expects
+// output/dev/demo_clip_1_source.mp4 + demo_clip_1.framing.json on the
+// backend) so Save and Export can be exercised end-to-end.
+const EDITOR_DEV_FIXTURES = {
+  static: {
+    framing_url: '/dev-fixtures/demo.framing.json',
+    source_url: '/dev-fixtures/demo-source.mp4',
+    video_title_for_youtube_short: 'Editor dev fixture',
+  },
+  backend: {
+    framing_url: '/videos/dev/demo_clip_1.framing.json',
+    source_url: '/videos/dev/demo_clip_1_source.mp4',
+    video_url: '/videos/dev/demo_clip_1_source.mp4',
+    video_title_for_youtube_short: 'Editor dev fixture (backend)',
+  },
 };
 
 function Root() {
@@ -38,10 +49,11 @@ function Root() {
     setView('app');
   };
 
-  if (new URLSearchParams(window.location.search).has('editorDev')) {
+  const editorDevMode = new URLSearchParams(window.location.search).get('editorDev');
+  if (editorDevMode) {
     return (
       <EditorView
-        clip={EDITOR_DEV_FIXTURE}
+        clip={EDITOR_DEV_FIXTURES[editorDevMode] || EDITOR_DEV_FIXTURES.static}
         index={0}
         jobId="dev"
         onClose={() => window.location.assign(window.location.pathname)}

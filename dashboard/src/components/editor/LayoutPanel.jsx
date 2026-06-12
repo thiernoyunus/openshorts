@@ -1,6 +1,7 @@
-import React from 'react';
-import { Users, AlertCircle } from 'lucide-react';
-import { tracksInSegment, LAYOUT_PANELS } from './useEditorState';
+import React, { useState } from 'react';
+import { Users, AlertCircle, Crop, Trash2 } from 'lucide-react';
+import { tracksInSegment, LAYOUT_PANELS, buildFillKeyframes } from './useEditorState';
+import ManualCropModal from './ManualCropModal';
 
 /** Mini glyph previews for each layout option (pure CSS). */
 const LayoutGlyph = ({ layout }) => {
@@ -50,13 +51,33 @@ const OPTIONS = [
  * Three / Four). Multi-person options disable when the selected scene has
  * fewer concurrent face tracks than panels.
  */
-export default function LayoutPanel({ framing, selectedIds, dispatch }) {
+export default function LayoutPanel({ framing, selectedIds, dispatch, sourceUrl }) {
+    const [showCropModal, setShowCropModal] = useState(false);
     const selectedSegments = framing.segments.filter((s) => selectedIds.includes(s.id));
     const primary = selectedSegments[0] || null;
     // For multi-select, available people = the minimum across selected segments
     const peopleAvailable = selectedSegments.length
         ? Math.min(...selectedSegments.map((s) => tracksInSegment(framing, s).length))
         : 0;
+
+    const primaryTracks = primary ? tracksInSegment(framing, primary) : [];
+    const panelCount = primary ? LAYOUT_PANELS[primary.layout] || 1 : 0;
+    const showPeopleAssignment =
+        selectedSegments.length === 1 &&
+        primary &&
+        (primary.layout === 'fill' || panelCount > 1) &&
+        primaryTracks.length > 0;
+
+    const assignFace = (panelIdx, trackId) => {
+        const faceIds = [...(primary.trackedFaceIds || [])];
+        faceIds[panelIdx] = trackId;
+        const payload = { type: 'SET_TRACKED_FACES', segmentId: primary.id, faceIds };
+        if (primary.layout === 'fill') {
+            // fill follows cameraKeyframes, so regenerate them along the new track
+            payload.cameraKeyframes = buildFillKeyframes(framing, primary, trackId);
+        }
+        dispatch(payload);
+    };
 
     return (
         <div className="w-[250px] shrink-0 border-l border-edge bg-surface overflow-y-auto custom-scrollbar">
@@ -116,9 +137,79 @@ export default function LayoutPanel({ framing, selectedIds, dispatch }) {
                                 No faces were detected in this scene, so only Fill and Fit are available.
                             </div>
                         )}
+
+                        {/* People / panel assignment */}
+                        {showPeopleAssignment && (
+                            <div className="mt-5">
+                                <h3 className="text-xs font-semibold text-fg uppercase tracking-wide mb-2">
+                                    {panelCount > 1 ? 'People' : 'Tracked person'}
+                                </h3>
+                                <div className="space-y-1.5">
+                                    {Array.from({ length: panelCount }).map((_, panelIdx) => (
+                                        <div key={panelIdx} className="flex items-center gap-2">
+                                            {panelCount > 1 && (
+                                                <span className="text-[10px] text-muted w-12 shrink-0">
+                                                    Panel {panelIdx + 1}
+                                                </span>
+                                            )}
+                                            <select
+                                                value={primary.trackedFaceIds?.[panelIdx] ?? ''}
+                                                onChange={(e) => assignFace(panelIdx, Number(e.target.value))}
+                                                className="flex-1 min-w-0 bg-surface2 border border-edge rounded-lg px-2 py-1.5 text-xs text-fg focus:outline-none focus:border-white/30 [color-scheme:dark]"
+                                            >
+                                                <option value="" disabled>
+                                                    Choose person…
+                                                </option>
+                                                {primaryTracks.map((t, ti) => (
+                                                    <option key={t.id} value={t.id}>
+                                                        Person {ti + 1}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Manual reframe */}
+                        {selectedSegments.length === 1 && (
+                            <div className="mt-5">
+                                <h3 className="text-xs font-semibold text-fg uppercase tracking-wide mb-2">Manual reframe</h3>
+                                <button
+                                    onClick={() => setShowCropModal(true)}
+                                    className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-edge bg-surface2/50 text-fg text-xs font-medium hover:bg-white/5 transition-colors"
+                                >
+                                    <Crop size={14} />
+                                    {primary.manualCrop ? 'Adjust crop' : 'Set custom crop'}
+                                </button>
+                                {primary.manualCrop && (
+                                    <button
+                                        onClick={() => dispatch({ type: 'SET_MANUAL_CROP', segmentId: primary.id, crop: null })}
+                                        className="mt-1.5 w-full flex items-center gap-2 px-3 py-2 rounded-lg text-muted text-[11px] hover:text-fg hover:bg-white/5 transition-colors"
+                                    >
+                                        <Trash2 size={12} />
+                                        Remove manual crop (back to auto)
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </>
                 )}
             </div>
+
+            {showCropModal && primary && (
+                <ManualCropModal
+                    sourceUrl={sourceUrl}
+                    source={framing.source}
+                    segment={primary}
+                    onApply={(crop) => {
+                        dispatch({ type: 'SET_MANUAL_CROP', segmentId: primary.id, crop });
+                        setShowCropModal(false);
+                    }}
+                    onClose={() => setShowCropModal(false)}
+                />
+            )}
         </div>
     );
 }

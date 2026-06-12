@@ -890,6 +890,125 @@ async def add_subtitles(req: SubtitleRequest):
         "new_video_url": f"/videos/{req.job_id}/{output_filename}"
     }
 
+# --- Clip framing (non-destructive editor, docs/video-editor-plan.md §2) ---
+
+FRAMING_LAYOUTS = {"fill", "fit", "split", "three", "four"}
+
+def _find_framing_path(job_id: str, clip_index: int) -> str:
+    output_dir = os.path.join(OUTPUT_DIR, job_id)
+    matches = glob.glob(os.path.join(output_dir, f"*_clip_{clip_index + 1}.framing.json"))
+    if not matches:
+        raise HTTPException(status_code=404, detail="Framing data not found for this clip")
+    return matches[0]
+
+def _crop_rect_valid(rect) -> bool:
+    if not isinstance(rect, dict):
+        return False
+    for key in ("x", "y", "w", "h"):
+        v = rect.get(key)
+        if not isinstance(v, (int, float)) or v < 0 or v > 1:
+            return False
+    return True
+
+def _validate_framing(framing: dict) -> Optional[str]:
+    """Returns an error message, or None if the framing config is valid."""
+    if not isinstance(framing, dict):
+        return "Framing must be an object"
+    if framing.get("version") != 1:
+        return "Unsupported framing version"
+    source = framing.get("source")
+    if not isinstance(source, dict):
+        return "Missing source"
+    for key in ("file", "fps", "width", "height", "durationFrames"):
+        if key not in source:
+            return f"source.{key} is required"
+    segments = framing.get("segments")
+    if not isinstance(segments, list) or not segments:
+        return "segments must be a non-empty list"
+    prev_end = 0
+    for i, seg in enumerate(segments):
+        if not isinstance(seg, dict):
+            return f"segments[{i}] must be an object"
+        if seg.get("layout") not in FRAMING_LAYOUTS:
+            return f"segments[{i}].layout must be one of {sorted(FRAMING_LAYOUTS)}"
+        start, end = seg.get("startFrame"), seg.get("endFrame")
+        if not isinstance(start, int) or not isinstance(end, int) or end <= start:
+            return f"segments[{i}] has an invalid frame range"
+        if start != prev_end:
+            return f"segments[{i}] is not contiguous with the previous segment"
+        prev_end = end
+        if not isinstance(seg.get("trackedFaceIds"), list):
+            return f"segments[{i}].trackedFaceIds must be a list"
+        keyframes = seg.get("cameraKeyframes")
+        if not isinstance(keyframes, list):
+            return f"segments[{i}].cameraKeyframes must be a list"
+        for kf in keyframes:
+            if not _crop_rect_valid(kf):
+                return f"segments[{i}] has an out-of-bounds camera keyframe"
+        manual = seg.get("manualCrop")
+        if manual is not None and not _crop_rect_valid(manual):
+            return f"segments[{i}].manualCrop is out of bounds"
+    if not isinstance(framing.get("faceTracks"), list):
+        return "faceTracks must be a list"
+    return None
+
+@app.get("/api/clips/{job_id}/{clip_index}/framing")
+async def get_clip_framing(job_id: str, clip_index: int):
+    framing_path = _find_framing_path(job_id, clip_index)
+    with open(framing_path, 'r') as f:
+        return json.load(f)
+
+@app.put("/api/clips/{job_id}/{clip_index}/framing")
+async def save_clip_framing(job_id: str, clip_index: int, request: Request):
+    framing_path = _find_framing_path(job_id, clip_index)
+    framing = await request.json()
+    error = _validate_framing(framing)
+    if error:
+        raise HTTPException(status_code=422, detail=error)
+    with open(framing_path, 'w') as f:
+        json.dump(framing, f)
+    return {"success": True}
+
+class ApplyRenderRequest(BaseModel):
+    job_id: str
+    clip_index: int
+    filename: str
+
+@app.post("/api/clips/apply-render")
+async def apply_render(req: ApplyRenderRequest):
+    """
+    Promote a render-service output file to be the clip's video. Mirrors the
+    subtitle endpoint's bookkeeping: updates the in-memory job (when present)
+    and the on-disk metadata so the results grid and downloads pick it up.
+    """
+    filename = os.path.basename(req.filename)
+    output_dir = os.path.join(OUTPUT_DIR, req.job_id)
+    rendered_path = os.path.join(output_dir, filename)
+    if not os.path.exists(rendered_path) or os.path.getsize(rendered_path) == 0:
+        raise HTTPException(status_code=404, detail=f"Rendered file not found: {filename}")
+
+    new_video_url = f"/videos/{req.job_id}/{filename}"
+
+    json_files = glob.glob(os.path.join(output_dir, "*_metadata.json"))
+    if json_files:
+        try:
+            with open(json_files[0], 'r') as f:
+                data = json.load(f)
+            clips = data.get('shorts', [])
+            if req.clip_index < len(clips):
+                clips[req.clip_index]['video_url'] = new_video_url
+                data['shorts'] = clips
+                with open(json_files[0], 'w') as f:
+                    json.dump(data, f, indent=4)
+        except Exception as e:
+            print(f"⚠️ apply-render: failed to update metadata.json: {e}")
+
+    job = jobs.get(req.job_id)
+    if job and 'result' in job and req.clip_index < len(job['result'].get('clips', [])):
+        job['result']['clips'][req.clip_index]['video_url'] = new_video_url
+
+    return {"success": True, "new_video_url": new_video_url}
+
 class HookRequest(BaseModel):
     job_id: str
     clip_index: int

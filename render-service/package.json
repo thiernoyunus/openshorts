@@ -9,8 +9,8 @@
     "start": "node dist/server.js"
   },
   "dependencies": {
-    "@remotion/bundler": "^4.0.0",
-    "@remotion/renderer": "^4.0.0",
+    "@remotion/bundler": "^4.0.468",
+    "@remotion/renderer": "^4.0.468",
     "express": "^4.21.0",
     "remotion": "^4.0.0",
     "uuid": "^10.0.0",

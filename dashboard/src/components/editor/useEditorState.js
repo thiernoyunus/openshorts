@@ -1,4 +1,5 @@
 import { useReducer } from 'react';
+import { cropForFace, smoothedFaceRect } from '../../remotion/compositions/ReframedVideo';
 
 /**
  * Editor state: the framing config being edited (docs/video-editor-plan.md §2),
@@ -31,7 +32,17 @@ export const editorReducer = (state, action) => {
         }
         case 'SET_TRACKED_FACES': {
             const segments = state.framing.segments.map((s) =>
-                s.id === action.segmentId ? { ...s, trackedFaceIds: action.faceIds } : s
+                s.id === action.segmentId
+                    ? {
+                          ...s,
+                          trackedFaceIds: action.faceIds,
+                          // For fill layouts the composition follows cameraKeyframes,
+                          // so changing the tracked person supplies regenerated ones
+                          ...(action.cameraKeyframes
+                              ? { cameraKeyframes: action.cameraKeyframes }
+                              : {}),
+                      }
+                    : s
             );
             return { ...state, framing: { ...state.framing, segments }, dirty: true };
         }
@@ -73,3 +84,44 @@ export function tracksInSegment(framing, segment) {
 
 /** Panels per layout — keep in sync with ReframedVideo.tsx panelsForLayout. */
 export const LAYOUT_PANELS = { fill: 1, fit: 1, split: 2, three: 3, four: 4 };
+
+/**
+ * Regenerate fill-layout camera keyframes by following one face track through
+ * a segment (used when the user picks a different person to track). Mirrors
+ * the pipeline's output shape; smoothing comes from smoothedFaceRect.
+ */
+export function buildFillKeyframes(framing, segment, trackId) {
+    const track = framing.faceTracks.find((t) => t.id === trackId);
+    if (!track) return [];
+    const { width: srcW, height: srcH } = framing.source;
+    const keyframes = [];
+    for (let frame = segment.startFrame; frame < segment.endFrame; frame += 3) {
+        const face = smoothedFaceRect(track, frame);
+        if (!face) continue;
+        const crop = cropForFace(face, 9 / 16, srcW, srcH);
+        keyframes.push({
+            frame,
+            x: Number(crop.x.toFixed(4)),
+            y: Number(crop.y.toFixed(4)),
+            w: Number(crop.w.toFixed(4)),
+            h: Number(crop.h.toFixed(4)),
+        });
+    }
+    return keyframes;
+}
+
+/** Center crop with a given pixel aspect, in normalized coords. */
+export function centerCropRect(panelAspect, srcW, srcH) {
+    let cropHpx = srcH;
+    let cropWpx = cropHpx * panelAspect;
+    if (cropWpx > srcW) {
+        cropWpx = srcW;
+        cropHpx = cropWpx / panelAspect;
+    }
+    return {
+        x: (srcW - cropWpx) / 2 / srcW,
+        y: (srcH - cropHpx) / 2 / srcH,
+        w: cropWpx / srcW,
+        h: cropHpx / srcH,
+    };
+}
