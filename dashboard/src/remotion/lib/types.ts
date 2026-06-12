@@ -58,6 +58,56 @@ export interface EffectsConfig {
   segments: EffectSegment[];
 }
 
+// --- Framing config (non-destructive reframing, schema: docs/video-editor-plan.md §2) ---
+// All coordinates are normalized 0-1 relative to the SOURCE video frame.
+// All frame numbers are in SOURCE fps (framing.source.fps), not composition fps.
+export type FramingLayout = "fill" | "fit" | "split" | "three" | "four";
+
+export interface CropRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface CameraKeyframe extends CropRect {
+  frame: number;
+}
+
+export interface FaceSample extends CropRect {
+  frame: number;
+}
+
+export interface FaceTrack {
+  id: number;
+  samples: FaceSample[];
+}
+
+export interface FramingSegment {
+  id: string;
+  startFrame: number;
+  endFrame: number; // exclusive
+  layout: FramingLayout;
+  trackedFaceIds: number[]; // one per panel, reading order
+  cameraKeyframes: CameraKeyframe[];
+  manualCrop: CropRect | null; // user override; wins over keyframes/tracks
+}
+
+export interface FramingSource {
+  file: string;
+  fps: number;
+  width: number;
+  height: number;
+  durationFrames: number;
+}
+
+export interface FramingConfig {
+  version: number;
+  source: FramingSource;
+  segments: FramingSegment[];
+  faceTracks: FaceTrack[];
+}
+
 // --- Main composition props ---
 export interface ShortVideoProps {
   videoUrl: string;
@@ -68,6 +118,9 @@ export interface ShortVideoProps {
   subtitles: SubtitleConfig | null;
   hook: HookConfig | null;
   effects: EffectsConfig | null;
+  /** 16:9 original clip; when set together with `framing`, it replaces videoUrl as the base layer */
+  sourceVideoUrl?: string | null;
+  framing?: FramingConfig | null;
 }
 
 // --- Zod schemas for validation (used by render service) ---
@@ -118,6 +171,45 @@ export const effectsConfigSchema = z.object({
   segments: z.array(effectSegmentSchema),
 });
 
+export const cropRectSchema = z.object({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  w: z.number().min(0).max(1),
+  h: z.number().min(0).max(1),
+});
+
+export const cameraKeyframeSchema = cropRectSchema.extend({
+  frame: z.number().int().min(0),
+});
+
+export const faceTrackSchema = z.object({
+  id: z.number().int().min(0),
+  samples: z.array(cameraKeyframeSchema),
+});
+
+export const framingSegmentSchema = z.object({
+  id: z.string(),
+  startFrame: z.number().int().min(0),
+  endFrame: z.number().int().positive(),
+  layout: z.enum(["fill", "fit", "split", "three", "four"]),
+  trackedFaceIds: z.array(z.number().int()),
+  cameraKeyframes: z.array(cameraKeyframeSchema),
+  manualCrop: cropRectSchema.nullable(),
+});
+
+export const framingConfigSchema = z.object({
+  version: z.number().int(),
+  source: z.object({
+    file: z.string(),
+    fps: z.number().positive(),
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+    durationFrames: z.number().int().positive(),
+  }),
+  segments: z.array(framingSegmentSchema),
+  faceTracks: z.array(faceTrackSchema),
+});
+
 export const shortVideoPropsSchema = z.object({
   videoUrl: z.string(),
   durationInFrames: z.number().int().positive(),
@@ -127,4 +219,6 @@ export const shortVideoPropsSchema = z.object({
   subtitles: subtitleConfigSchema.nullable(),
   hook: hookConfigSchema.nullable(),
   effects: effectsConfigSchema.nullable(),
+  sourceVideoUrl: z.string().nullable().optional(),
+  framing: framingConfigSchema.nullable().optional(),
 });

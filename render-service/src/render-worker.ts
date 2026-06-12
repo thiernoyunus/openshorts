@@ -17,6 +17,8 @@ export interface RenderParams {
     subtitles: unknown;
     hook: unknown;
     effects: unknown;
+    sourceVideoUrl: string | null;
+    framing: unknown;
   };
 }
 
