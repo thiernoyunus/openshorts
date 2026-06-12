@@ -34,7 +34,9 @@ export default function ManualCropModal({ sourceUrl, source, segment, onApply, o
             startY: e.clientY,
             startCrop: crop,
         };
-        e.target.setPointerCapture?.(e.pointerId);
+        try {
+            e.target.setPointerCapture?.(e.pointerId);
+        } catch { /* synthetic or already-released pointer */ }
     };
 
     const onPointerMove = (e) => {

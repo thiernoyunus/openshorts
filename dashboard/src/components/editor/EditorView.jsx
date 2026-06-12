@@ -333,6 +333,8 @@ export default function EditorView({ clip, index, jobId, onClose, onExported }) 
                         playerRef={playerRef}
                         selectedIds={state.selectedIds}
                         onSelect={(id, multi) => dispatch({ type: 'SELECT', id, multi })}
+                        dispatch={dispatch}
+                        sourceUrl={sourceUrl}
                     />
                 </>
             )}
