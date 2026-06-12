@@ -11,7 +11,7 @@ function logColor(line) {
   return 'text-muted';
 }
 
-export default function ProcessingModal({ open, onClose, title, logs = [], status, phase, onViewClips }) {
+export default function ProcessingModal({ open, onClose, title: _title, logs = [], status, phase, onViewClips }) {
   const endRef = useRef(null);
 
   useEffect(() => {
