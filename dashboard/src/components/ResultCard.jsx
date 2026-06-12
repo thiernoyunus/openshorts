@@ -450,13 +450,15 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
                     <span className="absolute top-2 right-2 bg-black/65 text-white text-[11px] font-medium px-1.5 py-0.5 rounded tabular-nums">{fmtTime(durSec)}</span>
 
                     {!playing && (
-                        <button
-                            onClick={(e) => { e.stopPropagation(); setPlaying(true); videoRef.current && videoRef.current.play(); }}
-                            className="absolute inset-0 flex items-center justify-center bg-black/10 group-hover:bg-black/25 transition-colors"
-                            aria-label="Play clip"
-                        >
-                            <span className="w-12 h-12 rounded-full bg-black/55 backdrop-blur flex items-center justify-center text-white"><Play size={22} className="ml-0.5" /></span>
-                        </button>
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/10 group-hover:bg-black/25 transition-colors pointer-events-none">
+                            <button
+                                onClick={(e) => { e.stopPropagation(); setPlaying(true); videoRef.current && videoRef.current.play(); }}
+                                className="w-12 h-12 rounded-full bg-black/55 backdrop-blur flex items-center justify-center text-white pointer-events-auto hover:bg-black/75 active:scale-95 transition-all"
+                                aria-label="Play clip"
+                            >
+                                <Play size={22} className="ml-0.5" />
+                            </button>
+                        </div>
                     )}
 
                     {isEditing && (
