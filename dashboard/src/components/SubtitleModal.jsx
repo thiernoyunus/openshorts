@@ -30,7 +30,7 @@ const ANIMATION_OPTIONS = [
 
 export default function SubtitleModal({ isOpen, onClose, onGenerate, isProcessing, videoUrl, jobId, clipIndex, existingHook }) {
     const [position, setPosition] = useState('bottom');
-    const [fontSize, setFontSize] = useState(24);
+    const [fontSize, _setFontSize] = useState(24);
     const [fontName, setFontName] = useState('Verdana');
     const [fontColor, setFontColor] = useState('#FFFFFF');
     const [highlightColor, setHighlightColor] = useState('#FFDD00');

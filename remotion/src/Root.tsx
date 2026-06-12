@@ -6,6 +6,8 @@ import { shortVideoPropsSchema } from "./lib/types";
 
 const DEFAULT_PROPS: ShortVideoProps = {
   videoUrl: "",
+  sourceVideoUrl: null,
+  framing: null,
   durationInFrames: 900, // 30s at 30fps
   fps: 30,
   width: 1080,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Share2, Instagram, Youtube, Video, CheckCircle, AlertCircle, X, Loader2, Copy, Wand2, Type, Calendar, Clock, Languages, Play, ArrowUp, ArrowDown, FileText } from 'lucide-react';
+import { Download, Share2, Instagram, Youtube, Video, CheckCircle, AlertCircle, X, Loader2, Copy, Wand2, Type, Calendar, Clock, Languages, Play, ArrowUp, ArrowDown, FileText, Crop } from 'lucide-react';
 import { getApiUrl } from '../config';
 import SubtitleModal from './SubtitleModal';
 import HookModal from './HookModal';
@@ -11,7 +11,7 @@ const fmtTime = (s) => {
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
-export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, geminiApiKey, elevenLabsKey, onPlay, onPause, openIndex, setOpenIndex, totalClips }) {
+export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUserId, geminiApiKey, elevenLabsKey, onPlay, onPause, openIndex, setOpenIndex, totalClips, onEdit }) {
     const isOpen = openIndex === index;
     const [showModal, setShowModal] = useState(false);
     const [showSubtitleModal, setShowSubtitleModal] = useState(false);
@@ -524,6 +524,9 @@ export default function ResultCard({ clip, index, jobId, uploadPostKey, uploadUs
 
                         {/* Actions */}
                         <div className="w-[200px] shrink-0 border-l border-edge p-4 space-y-2 overflow-y-auto custom-scrollbar">
+                            {clip.framing_url && clip.source_url && onEdit && (
+                                <ActionBtn icon={Crop} label="Edit clip" primary onClick={() => { setOpenIndex(null); onEdit(index); }} />
+                            )}
                             <ActionBtn icon={Share2} label="Publish on Social" primary onClick={() => setShowModal(true)} />
                             <ActionBtn icon={Download} label="Download HD" onClick={handleDownload} />
                             <div className="h-px bg-edge my-1" />

@@ -35,6 +35,8 @@ const renderRequestSchema = z.object({
     subtitles: z.any().nullable().optional(),
     hook: z.any().nullable().optional(),
     effects: z.any().nullable().optional(),
+    sourceVideoUrl: z.string().nullable().optional(),
+    framing: z.any().nullable().optional(),
   }),
 });
 
@@ -83,14 +85,19 @@ app.post("/render", (req, res) => {
     `[render] Queued render ${renderId} for job=${jobId} clip=${clipIndex}`
   );
 
-  // Resolve video URL: convert frontend/backend URLs to renderer's own static server
+  // Resolve video URLs: convert frontend/backend URLs to renderer's own static server
   // The renderer serves /output/* from the shared Docker volume
-  let resolvedVideoUrl = props.videoUrl;
-  const videoPathMatch = props.videoUrl.match(/\/videos\/([^/]+)\/(.+)$/);
-  if (videoPathMatch) {
-    resolvedVideoUrl = `http://localhost:${PORT}/output/${videoPathMatch[1]}/${videoPathMatch[2]}`;
-    console.log(`[render] Resolved video URL: ${props.videoUrl} -> ${resolvedVideoUrl}`);
-  }
+  const resolveUrl = (url: string): string => {
+    const match = url.match(/\/videos\/([^/]+)\/(.+)$/);
+    if (!match) return url;
+    const resolved = `http://localhost:${PORT}/output/${match[1]}/${match[2]}`;
+    console.log(`[render] Resolved video URL: ${url} -> ${resolved}`);
+    return resolved;
+  };
+  const resolvedVideoUrl = resolveUrl(props.videoUrl);
+  const resolvedSourceVideoUrl = props.sourceVideoUrl
+    ? resolveUrl(props.sourceVideoUrl)
+    : null;
 
   // Fire and forget - render runs in background
   executeRender({
@@ -106,6 +113,8 @@ app.post("/render", (req, res) => {
       subtitles: props.subtitles ?? null,
       hook: props.hook ?? null,
       effects: props.effects ?? null,
+      sourceVideoUrl: resolvedSourceVideoUrl,
+      framing: props.framing ?? null,
     },
   }).catch((err) => {
     console.error(`[render] Unhandled error for ${renderId}:`, err);

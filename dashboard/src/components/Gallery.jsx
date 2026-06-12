@@ -120,7 +120,7 @@ export default function Gallery() {
             ) : (
                 <>
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 pb-10">
-                        {clips.map((clip, i) => (
+                        {clips.map((clip) => (
                             <GalleryCard key={`${clip.job_id}-${clip.index}`} clip={clip} />
                         ))}
                     </div>

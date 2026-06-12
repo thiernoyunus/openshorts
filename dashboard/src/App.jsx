@@ -9,6 +9,7 @@ import SaaShortsTab from './components/SaaShortsTab';
 import UGCGallery from './components/UGCGallery';
 import ScheduleWeekModal from './components/ScheduleWeekModal';
 import ProcessingModal from './components/ProcessingModal';
+import EditorView from './components/editor/EditorView';
 import { getProjects, addProject, updateProject, phaseFromLogs, titleFromPayload, thumbFromPayload, coverFromString, fetchVideoTitle, captureVideoFrame } from './lib/projectHistory';
 import { getApiUrl } from './config';
 
@@ -172,11 +173,12 @@ function App() {
   const [showProcessingModal, setShowProcessingModal] = useState(false);
   const [viewingResults, setViewingResults] = useState(false);
   const [openClip, setOpenClip] = useState(null);
+  const [editingClip, setEditingClip] = useState(null); // clip index being edited in EditorView
 
   // Sync state for original video playback
-  const [syncedTime, setSyncedTime] = useState(0);
-  const [isSyncedPlaying, setIsSyncedPlaying] = useState(false);
-  const [syncTrigger, setSyncTrigger] = useState(0);
+  const [_syncedTime, setSyncedTime] = useState(0);
+  const [_isSyncedPlaying, setIsSyncedPlaying] = useState(false);
+  const [_syncTrigger, setSyncTrigger] = useState(0);
 
   const handleClipPlay = (startTime) => {
     setSyncedTime(startTime);
@@ -1018,6 +1020,7 @@ function App() {
                         openIndex={openClip}
                         setOpenIndex={setOpenClip}
                         totalClips={results.clips.length}
+                        onEdit={(clipIndex) => setEditingClip(clipIndex)}
                       />
                     ))}
                   </div>
@@ -1138,6 +1141,24 @@ function App() {
         phase={phaseFromLogs(logs)}
         onViewClips={() => { setShowProcessingModal(false); setViewingResults(true); }}
       />
+
+      {editingClip !== null && results?.clips?.[editingClip] && (
+        <EditorView
+          clip={results.clips[editingClip]}
+          index={editingClip}
+          jobId={jobId}
+          onClose={() => setEditingClip(null)}
+          onExported={(newVideoUrl) => {
+            setResults((prev) => {
+              if (!prev?.clips?.[editingClip]) return prev;
+              const clips = prev.clips.map((c, i) =>
+                i === editingClip ? { ...c, video_url: newVideoUrl } : c
+              );
+              return { ...prev, clips };
+            });
+          }}
+        />
+      )}
     </div>
   );
 }
