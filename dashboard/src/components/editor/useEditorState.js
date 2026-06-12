@@ -1,14 +1,27 @@
 import { useReducer } from 'react';
 import { cropForFace, smoothedFaceRect } from '../../remotion/compositions/ReframedVideo';
 
+const HISTORY_LIMIT = 50;
+
 /**
  * Editor state: the framing config being edited (docs/video-editor-plan.md §2),
- * the selected segment ids, and a dirty flag for unsaved changes.
+ * the selected segment ids, a dirty flag for unsaved changes, and an
+ * undo/redo history of framing snapshots (framing is immutable, so snapshots
+ * are cheap references).
  */
 export const editorReducer = (state, action) => {
+    // Mutating actions snapshot the current framing for undo
+    const withHistory = (framing) => ({
+        ...state,
+        framing,
+        dirty: true,
+        past: [...state.past.slice(-HISTORY_LIMIT + 1), state.framing],
+        future: [],
+    });
+
     switch (action.type) {
         case 'LOAD':
-            return { framing: action.framing, selectedIds: [], dirty: false };
+            return { framing: action.framing, selectedIds: [], dirty: false, past: [], future: [] };
         case 'SELECT': {
             const { id, multi } = action;
             if (!multi) return { ...state, selectedIds: [id] };
@@ -28,7 +41,7 @@ export const editorReducer = (state, action) => {
                     ? { ...s, layout: action.layout, manualCrop: null }
                     : s
             );
-            return { ...state, framing: { ...state.framing, segments }, dirty: true };
+            return withHistory({ ...state.framing, segments });
         }
         case 'SET_TRACKED_FACES': {
             const segments = state.framing.segments.map((s) =>
@@ -44,13 +57,35 @@ export const editorReducer = (state, action) => {
                       }
                     : s
             );
-            return { ...state, framing: { ...state.framing, segments }, dirty: true };
+            return withHistory({ ...state.framing, segments });
         }
         case 'SET_MANUAL_CROP': {
             const segments = state.framing.segments.map((s) =>
                 s.id === action.segmentId ? { ...s, manualCrop: action.crop } : s
             );
-            return { ...state, framing: { ...state.framing, segments }, dirty: true };
+            return withHistory({ ...state.framing, segments });
+        }
+        case 'UNDO': {
+            if (state.past.length === 0) return state;
+            const previous = state.past[state.past.length - 1];
+            return {
+                ...state,
+                framing: previous,
+                dirty: true,
+                past: state.past.slice(0, -1),
+                future: [state.framing, ...state.future],
+            };
+        }
+        case 'REDO': {
+            if (state.future.length === 0) return state;
+            const [next, ...rest] = state.future;
+            return {
+                ...state,
+                framing: next,
+                dirty: true,
+                past: [...state.past, state.framing],
+                future: rest,
+            };
         }
         case 'MARK_SAVED':
             return { ...state, dirty: false };
@@ -60,7 +95,13 @@ export const editorReducer = (state, action) => {
 };
 
 export default function useEditorState() {
-    return useReducer(editorReducer, { framing: null, selectedIds: [], dirty: false });
+    return useReducer(editorReducer, {
+        framing: null,
+        selectedIds: [],
+        dirty: false,
+        past: [],
+        future: [],
+    });
 }
 
 /**

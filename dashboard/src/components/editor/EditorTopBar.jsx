@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Save, Upload, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, Upload, Loader2, Undo2, Redo2 } from 'lucide-react';
 
 export default function EditorTopBar({
     title,
@@ -7,6 +7,10 @@ export default function EditorTopBar({
     saving,
     exporting,
     exportProgress,
+    canUndo,
+    canRedo,
+    onUndo,
+    onRedo,
     onBack,
     onSave,
     onExport,
@@ -26,6 +30,24 @@ export default function EditorTopBar({
                     <span className="ml-2 inline-block w-1.5 h-1.5 rounded-full bg-viral align-middle" title="Unsaved changes" />
                 )}
             </h1>
+            <button
+                onClick={onUndo}
+                disabled={!canUndo}
+                title="Undo (⌘Z)"
+                className="w-9 h-9 rounded-lg flex items-center justify-center text-muted hover:text-fg hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                aria-label="Undo"
+            >
+                <Undo2 size={16} />
+            </button>
+            <button
+                onClick={onRedo}
+                disabled={!canRedo}
+                title="Redo (⇧⌘Z)"
+                className="w-9 h-9 rounded-lg flex items-center justify-center text-muted hover:text-fg hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                aria-label="Redo"
+            >
+                <Redo2 size={16} />
+            </button>
             <button
                 onClick={onSave}
                 disabled={!dirty || saving || !onSave}

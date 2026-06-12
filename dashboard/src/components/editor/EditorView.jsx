@@ -158,14 +158,39 @@ export default function EditorView({ clip, index, jobId, onClose, onExported }) 
         }
     }, [state.dirty, state.framing, saveFraming, jobId, index, clip, onExported, showError]);
 
-    // Esc closes (with the same dirty guard)
+    // Keyboard shortcuts: Esc close · Space play/pause · ←/→ seek 1s ·
+    // Cmd/Ctrl+Z undo · Shift+Cmd/Ctrl+Z redo · Cmd/Ctrl+S save
     useEffect(() => {
         const onKey = (e) => {
-            if (e.key === 'Escape') handleBack();
+            const tag = e.target?.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            const mod = e.metaKey || e.ctrlKey;
+
+            if (e.key === 'Escape') {
+                handleBack();
+            } else if (e.key === ' ' && !mod) {
+                e.preventDefault();
+                const p = playerRef.current;
+                if (p) p.isPlaying() ? p.pause() : p.play();
+            } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !mod) {
+                e.preventDefault();
+                const p = playerRef.current;
+                if (p) {
+                    const delta = (e.key === 'ArrowLeft' ? -1 : 1) * EDITOR_FPS;
+                    p.pause();
+                    p.seekTo(Math.max(0, p.getCurrentFrame() + delta));
+                }
+            } else if (mod && e.key.toLowerCase() === 'z') {
+                e.preventDefault();
+                dispatch({ type: e.shiftKey ? 'REDO' : 'UNDO' });
+            } else if (mod && e.key.toLowerCase() === 's') {
+                e.preventDefault();
+                handleSave();
+            }
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [handleBack]);
+    }, [handleBack, handleSave, dispatch]);
 
     const framing = state.framing;
     const durationInFrames = framing
@@ -183,6 +208,10 @@ export default function EditorView({ clip, index, jobId, onClose, onExported }) 
                 saving={saving}
                 exporting={exporting}
                 exportProgress={exportProgress}
+                canUndo={state.past.length > 0}
+                canRedo={state.future.length > 0}
+                onUndo={() => dispatch({ type: 'UNDO' })}
+                onRedo={() => dispatch({ type: 'REDO' })}
                 onBack={handleBack}
                 onSave={framing ? handleSave : undefined}
                 onExport={framing ? handleExport : undefined}
