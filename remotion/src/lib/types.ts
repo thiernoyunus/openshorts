@@ -61,7 +61,14 @@ export interface EffectsConfig {
 // --- Framing config (non-destructive reframing, schema: docs/video-editor-plan.md §2) ---
 // All coordinates are normalized 0-1 relative to the SOURCE video frame.
 // All frame numbers are in SOURCE fps (framing.source.fps), not composition fps.
-export type FramingLayout = "fill" | "fit" | "split" | "three" | "four";
+export type FramingLayout =
+  | "fill"
+  | "fit"
+  | "split"
+  | "three"
+  | "four"
+  | "screenshare"
+  | "gameplay";
 
 export interface CropRect {
   x: number;
@@ -101,11 +108,62 @@ export interface FramingSource {
   durationFrames: number;
 }
 
+/** Removed source range (EDL cut). Sorted, non-overlapping, inside clip bounds. */
+export interface SourceCut {
+  startFrame: number;
+  endFrame: number; // exclusive
+}
+
+/** Text overlay track (max 5). Frame times in SOURCE frames, EDL-mapped. */
+export interface TextOverlay {
+  id: string;
+  text: string;
+  startFrame: number;
+  endFrame: number;
+  x: number; // normalized center 0-1
+  y: number;
+  size: "S" | "M" | "L";
+  color: string;
+  bg: boolean;
+}
+
+export interface MusicConfig {
+  url: string;
+  volume: number; // 0-1
+  originalVolume: number; // 0-1, applied to the source video audio
+}
+
+export interface TransitionsConfig {
+  fadeIn: boolean;
+  fadeOut: boolean;
+  cutCrossfade: boolean;
+}
+
+export interface BrollItem {
+  id: string;
+  url: string;
+  startFrame: number; // SOURCE frames, EDL-mapped
+  endFrame: number;
+}
+
 export interface FramingConfig {
   version: number;
   source: FramingSource;
   segments: FramingSegment[];
   faceTracks: FaceTrack[];
+  /**
+   * v2 (EDL): playable content = [clipInFrame, clipOutFrame] minus cuts.
+   * v1 files omit these; consumers default to 0..durationFrames with no cuts.
+   * Segments must stay contiguous and cover exactly [clipInFrame, clipOutFrame].
+   */
+  clipInFrame?: number;
+  clipOutFrame?: number;
+  cuts?: SourceCut[];
+  subtitles?: SubtitleConfig | null;
+  textOverlays?: TextOverlay[];
+  music?: MusicConfig | null;
+  transitions?: TransitionsConfig;
+  broll?: BrollItem[];
 }
 
 // --- Main composition props ---
@@ -191,10 +249,46 @@ export const framingSegmentSchema = z.object({
   id: z.string(),
   startFrame: z.number().int().min(0),
   endFrame: z.number().int().positive(),
-  layout: z.enum(["fill", "fit", "split", "three", "four"]),
+  layout: z.enum(["fill", "fit", "split", "three", "four", "screenshare", "gameplay"]),
   trackedFaceIds: z.array(z.number().int()),
   cameraKeyframes: z.array(cameraKeyframeSchema),
   manualCrop: cropRectSchema.nullable(),
+});
+
+export const sourceCutSchema = z.object({
+  startFrame: z.number().int().min(0),
+  endFrame: z.number().int().positive(),
+});
+
+export const textOverlaySchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  startFrame: z.number().int().min(0),
+  endFrame: z.number().int().positive(),
+  x: z.number(),
+  y: z.number(),
+  size: z.enum(["S", "M", "L"]),
+  color: z.string(),
+  bg: z.boolean(),
+});
+
+export const musicConfigSchema = z.object({
+  url: z.string(),
+  volume: z.number().min(0).max(1),
+  originalVolume: z.number().min(0).max(1),
+});
+
+export const transitionsConfigSchema = z.object({
+  fadeIn: z.boolean(),
+  fadeOut: z.boolean(),
+  cutCrossfade: z.boolean(),
+});
+
+export const brollItemSchema = z.object({
+  id: z.string(),
+  url: z.string(),
+  startFrame: z.number().int().min(0),
+  endFrame: z.number().int().positive(),
 });
 
 export const framingConfigSchema = z.object({
@@ -208,6 +302,15 @@ export const framingConfigSchema = z.object({
   }),
   segments: z.array(framingSegmentSchema),
   faceTracks: z.array(faceTrackSchema),
+  // v2 EDL + feature payloads — optional so v1 files still validate
+  clipInFrame: z.number().int().min(0).optional(),
+  clipOutFrame: z.number().int().positive().optional(),
+  cuts: z.array(sourceCutSchema).optional(),
+  subtitles: subtitleConfigSchema.nullable().optional(),
+  textOverlays: z.array(textOverlaySchema).optional(),
+  music: musicConfigSchema.nullable().optional(),
+  transitions: transitionsConfigSchema.optional(),
+  broll: z.array(brollItemSchema).optional(),
 });
 
 export const shortVideoPropsSchema = z.object({

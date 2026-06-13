@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Users, AlertCircle, Crop, Trash2 } from 'lucide-react';
-import { tracksInSegment, LAYOUT_PANELS, buildFillKeyframes } from './useEditorState';
+import { tracksInSegment, LAYOUT_PANELS, FACE_PANEL_INDICES, buildFillKeyframes } from './useEditorState';
 import ManualCropModal from './ManualCropModal';
 
 /** Mini glyph previews for each layout option (pure CSS). */
@@ -28,6 +28,20 @@ const LayoutGlyph = ({ layout }) => {
                 <div className={`flex-1 ${cell}`} />
             </div>
         );
+    if (layout === 'screenshare')
+        return (
+            <div className="w-4 h-7 flex flex-col gap-px">
+                <div className={`flex-[3] ${cell}`} />
+                <div className={`flex-[2] bg-zinc-600 rounded-[1px]`} />
+            </div>
+        );
+    if (layout === 'gameplay')
+        return (
+            <div className="w-4 h-7 flex flex-col gap-px">
+                <div className={`flex-[3] bg-zinc-600 rounded-[1px]`} />
+                <div className={`flex-[7] ${cell}`} />
+            </div>
+        );
     return (
         <div className="w-4 h-7 grid grid-cols-2 gap-px">
             <div className={cell} />
@@ -44,6 +58,8 @@ const OPTIONS = [
     { id: 'split', label: 'Split', desc: '2 people stacked' },
     { id: 'three', label: 'Three', desc: '3 people stacked' },
     { id: 'four', label: 'Four', desc: '2×2 grid of 4 people' },
+    { id: 'screenshare', label: 'Screenshare', desc: 'Screen on top, speaker below' },
+    { id: 'gameplay', label: 'Gameplay', desc: 'Speaker on top, gameplay below' },
 ];
 
 /**
@@ -61,11 +77,11 @@ export default function LayoutPanel({ framing, selectedIds, dispatch, sourceUrl 
         : 0;
 
     const primaryTracks = primary ? tracksInSegment(framing, primary) : [];
-    const panelCount = primary ? LAYOUT_PANELS[primary.layout] || 1 : 0;
+    const facePanels = primary ? FACE_PANEL_INDICES[primary.layout] || [] : [];
     const showPeopleAssignment =
         selectedSegments.length === 1 &&
         primary &&
-        (primary.layout === 'fill' || panelCount > 1) &&
+        facePanels.length > 0 &&
         primaryTracks.length > 0;
 
     const assignFace = (panelIdx, trackId) => {
@@ -80,7 +96,7 @@ export default function LayoutPanel({ framing, selectedIds, dispatch, sourceUrl 
     };
 
     return (
-        <div className="w-[250px] shrink-0 border-l border-edge bg-surface overflow-y-auto custom-scrollbar">
+        <div>
             <div className="p-4">
                 <h3 className="text-xs font-semibold text-fg uppercase tracking-wide mb-1">Layout</h3>
                 {!primary ? (
@@ -138,18 +154,18 @@ export default function LayoutPanel({ framing, selectedIds, dispatch, sourceUrl 
                             </div>
                         )}
 
-                        {/* People / panel assignment */}
+                        {/* People / panel assignment (one dropdown per face panel) */}
                         {showPeopleAssignment && (
                             <div className="mt-5">
                                 <h3 className="text-xs font-semibold text-fg uppercase tracking-wide mb-2">
-                                    {panelCount > 1 ? 'People' : 'Tracked person'}
+                                    {facePanels.length > 1 ? 'People' : 'Tracked person'}
                                 </h3>
                                 <div className="space-y-1.5">
-                                    {Array.from({ length: panelCount }).map((_, panelIdx) => (
+                                    {facePanels.map((panelIdx, n) => (
                                         <div key={panelIdx} className="flex items-center gap-2">
-                                            {panelCount > 1 && (
+                                            {facePanels.length > 1 && (
                                                 <span className="text-[10px] text-muted w-12 shrink-0">
-                                                    Panel {panelIdx + 1}
+                                                    Panel {n + 1}
                                                 </span>
                                             )}
                                             <select

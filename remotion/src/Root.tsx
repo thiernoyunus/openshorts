@@ -3,6 +3,7 @@ import { Composition } from "remotion";
 import { ShortVideo } from "./compositions/ShortVideo";
 import type { ShortVideoProps } from "./lib/types";
 import { shortVideoPropsSchema } from "./lib/types";
+import { outputDurationFrames } from "./lib/edl";
 
 const DEFAULT_PROPS: ShortVideoProps = {
   videoUrl: "",
@@ -86,6 +87,16 @@ export const RemotionRoot: React.FC = () => {
         width={DEFAULT_PROPS.width}
         height={DEFAULT_PROPS.height}
         defaultProps={DEFAULT_PROPS}
+        // The clip's real length: derive from the EDL when framing is present
+        // (trims/cuts change duration), else honor the explicit prop.
+        calculateMetadata={({ props }) => {
+          const fps = props.fps || DEFAULT_PROPS.fps;
+          const durationInFrames =
+            props.framing && props.sourceVideoUrl
+              ? outputDurationFrames(props.framing, fps)
+              : props.durationInFrames || DEFAULT_PROPS.durationInFrames;
+          return { durationInFrames, fps };
+        }}
       />
     </>
   );

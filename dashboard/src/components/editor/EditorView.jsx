@@ -1,16 +1,33 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, LayoutGrid, Captions, Crosshair, Sparkles, Type, Music, Clapperboard } from 'lucide-react';
 import { getApiUrl } from '../../config';
-import useEditorState from './useEditorState';
+import useEditorState, { defaultSubtitleConfig } from './useEditorState';
+import { outputDurationFrames, outputToSource } from '../../remotion/lib/edl';
 import EditorTopBar from './EditorTopBar';
 import EditorCanvas, { EDITOR_FPS } from './EditorCanvas';
 import EditorTimeline from './EditorTimeline';
 import LayoutPanel from './LayoutPanel';
+import TranscriptPanel from './TranscriptPanel';
+import CaptionsPanel from './CaptionsPanel';
+import TransitionsPanel from './TransitionsPanel';
+import TextPanel from './TextPanel';
+import AudioPanel from './AudioPanel';
+import BrollPanel from './BrollPanel';
+
+const TABS = [
+    { id: 'layout', label: 'Layout', icon: LayoutGrid },
+    { id: 'captions', label: 'Captions', icon: Captions },
+    { id: 'text', label: 'Text', icon: Type },
+    { id: 'audio', label: 'Audio', icon: Music },
+    { id: 'broll', label: 'B-Roll', icon: Clapperboard },
+    { id: 'transitions', label: 'Effects', icon: Sparkles },
+];
 
 /**
- * Full-screen clip editor (docs/video-editor-plan.md Phase 3+4).
- * Loads the clip's framing.json and 16:9 source, previews the reframe live in
- * a Remotion Player, and lets the user change per-segment layout.
+ * Full-screen clip editor (docs/video-editor-plan.md Phases 3-6).
+ * Loads the clip's framing.json, transcript, and 16:9 source; previews the
+ * reframe + captions live in a Remotion Player; per-segment layout editing,
+ * caption styling, transcript-based seeking and word editing.
  */
 export default function EditorView({ clip, index, jobId, onClose, onExported }) {
     const [state, dispatch] = useEditorState();
@@ -19,6 +36,9 @@ export default function EditorView({ clip, index, jobId, onClose, onExported }) 
     const [saving, setSaving] = useState(false);
     const [exporting, setExporting] = useState(false);
     const [exportProgress, setExportProgress] = useState(0);
+    const [captions, setCaptions] = useState([]);
+    const [activeTab, setActiveTab] = useState('layout'); // layout | captions
+    const [trackerOn, setTrackerOn] = useState(false);
     const playerRef = useRef(null);
 
     const framingUrl = clip.framing_url ? getApiUrl(clip.framing_url) : null;
@@ -49,6 +69,35 @@ export default function EditorView({ clip, index, jobId, onClose, onExported }) 
             cancelled = true;
         };
     }, [framingUrl, dispatch]);
+
+    // Word-level transcript for the transcript panel and captions
+    useEffect(() => {
+        if (jobId == null || index == null) return;
+        let cancelled = false;
+        fetch(getApiUrl(`/api/clip/${jobId}/${index}/transcript`))
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => {
+                if (!cancelled && data?.captions) setCaptions(data.captions);
+            })
+            .catch(() => {}); // transcript is optional — editor works without it
+        return () => {
+            cancelled = true;
+        };
+    }, [jobId, index]);
+
+    const handleEditWord = useCallback(
+        (wordIndex, text) => {
+            setCaptions((prev) => prev.map((w, i) => (i === wordIndex ? { ...w, text } : w)));
+            if (state.framing?.subtitles) {
+                dispatch({ type: 'EDIT_CAPTION_WORD', index: wordIndex, text });
+            } else if (state.framing) {
+                // Editing a caption implies wanting captions: enable with the edit applied
+                const edited = captions.map((w, i) => (i === wordIndex ? { ...w, text } : w));
+                dispatch({ type: 'SET_SUBTITLES', subtitles: defaultSubtitleConfig(edited) });
+            }
+        },
+        [state.framing, captions, dispatch]
+    );
 
     const handleBack = useCallback(() => {
         if (state.dirty && !window.confirm('You have unsaved changes. Leave the editor anyway?')) {
@@ -97,10 +146,7 @@ export default function EditorView({ clip, index, jobId, onClose, onExported }) 
             // Persist the framing first so export and saved state never diverge
             if (state.dirty) await saveFraming();
 
-            const durationInFrames = Math.max(
-                1,
-                Math.round((state.framing.source.durationFrames / state.framing.source.fps) * EDITOR_FPS)
-            );
+            const durationInFrames = outputDurationFrames(state.framing, EDITOR_FPS);
             const res = await fetch(getApiUrl('/render'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -115,7 +161,7 @@ export default function EditorView({ clip, index, jobId, onClose, onExported }) 
                         fps: EDITOR_FPS,
                         width: 1080,
                         height: 1920,
-                        subtitles: null,
+                        subtitles: state.framing.subtitles ?? null,
                         hook: null,
                         effects: null,
                     },
@@ -193,9 +239,13 @@ export default function EditorView({ clip, index, jobId, onClose, onExported }) 
     }, [handleBack, handleSave, dispatch]);
 
     const framing = state.framing;
-    const durationInFrames = framing
-        ? Math.max(1, Math.round((framing.source.durationFrames / framing.source.fps) * EDITOR_FPS))
-        : 1;
+    const durationInFrames = framing ? outputDurationFrames(framing, EDITOR_FPS) : 1;
+
+    // Current playhead in SOURCE frames — for inserting text/b-roll at the playhead
+    const getCurrentSourceFrame = useCallback(
+        () => (framing ? outputToSource(framing, playerRef.current?.getCurrentFrame() ?? 0, EDITOR_FPS) : 0),
+        [framing]
+    );
 
     const title =
         clip.video_title_for_youtube_short || `Clip ${typeof index === 'number' ? index + 1 : ''}`;
@@ -236,23 +286,90 @@ export default function EditorView({ clip, index, jobId, onClose, onExported }) 
             ) : (
                 <>
                     <div className="flex-1 flex min-h-0">
+                        {/* Transcript column */}
+                        <TranscriptPanel
+                            captions={captions}
+                            framing={framing}
+                            playerRef={playerRef}
+                            onEditWord={handleEditWord}
+                            dispatch={dispatch}
+                        />
+
                         {/* Canvas */}
-                        <div className="flex-1 min-w-0 bg-canvas flex items-center justify-center p-6">
-                            <EditorCanvas
-                                ref={playerRef}
-                                sourceUrl={sourceUrl}
-                                framing={framing}
-                                durationInFrames={durationInFrames}
-                            />
+                        <div className="flex-1 min-w-0 bg-canvas flex flex-col items-center justify-center gap-3 p-6 min-h-0">
+                            <button
+                                onClick={() => setTrackerOn((v) => !v)}
+                                title="Click a person on the canvas to track them"
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-medium transition-colors shrink-0 ${
+                                    trackerOn
+                                        ? 'bg-viral/20 border-viral/50 text-viral'
+                                        : 'bg-surface2/60 border-edge text-muted hover:text-fg'
+                                }`}
+                            >
+                                <Crosshair size={12} />
+                                Tracker: {trackerOn ? 'ON — click a person' : 'OFF'}
+                            </button>
+                            {/* The absolute box gives EditorCanvas's h-full a definite height
+                                (percentages don't resolve against flex-grown items) */}
+                            <div className="relative flex-1 min-h-0 w-full">
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <EditorCanvas
+                                        ref={playerRef}
+                                        sourceUrl={sourceUrl}
+                                        framing={framing}
+                                        subtitles={framing.subtitles || null}
+                                        durationInFrames={durationInFrames}
+                                        trackerOn={trackerOn}
+                                        dispatch={dispatch}
+                                    />
+                                </div>
+                            </div>
                         </div>
 
-                        {/* Tool rail */}
-                        <LayoutPanel
-                            framing={framing}
-                            selectedIds={state.selectedIds}
-                            dispatch={dispatch}
-                            sourceUrl={sourceUrl}
-                        />
+                        {/* Tool rail with icon tabs */}
+                        <div className="w-[260px] shrink-0 border-l border-edge bg-surface flex flex-col min-h-0">
+                            <div className="grid grid-cols-6 border-b border-edge shrink-0">
+                                {TABS.map((tab) => (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        title={tab.label}
+                                        className={`flex flex-col items-center gap-0.5 py-2 text-[9px] font-medium transition-colors ${
+                                            activeTab === tab.id
+                                                ? 'text-fg border-b-2 border-fg -mb-px'
+                                                : 'text-muted hover:text-fg'
+                                        }`}
+                                    >
+                                        <tab.icon size={14} /> {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="flex-1 overflow-y-auto custom-scrollbar">
+                                {activeTab === 'layout' && (
+                                    <LayoutPanel
+                                        framing={framing}
+                                        selectedIds={state.selectedIds}
+                                        dispatch={dispatch}
+                                        sourceUrl={sourceUrl}
+                                    />
+                                )}
+                                {activeTab === 'captions' && (
+                                    <CaptionsPanel framing={framing} captions={captions} dispatch={dispatch} />
+                                )}
+                                {activeTab === 'text' && (
+                                    <TextPanel framing={framing} dispatch={dispatch} getCurrentSourceFrame={getCurrentSourceFrame} />
+                                )}
+                                {activeTab === 'audio' && (
+                                    <AudioPanel framing={framing} jobId={jobId} clipIndex={index} dispatch={dispatch} />
+                                )}
+                                {activeTab === 'broll' && (
+                                    <BrollPanel framing={framing} dispatch={dispatch} getCurrentSourceFrame={getCurrentSourceFrame} />
+                                )}
+                                {activeTab === 'transitions' && (
+                                    <TransitionsPanel framing={framing} dispatch={dispatch} />
+                                )}
+                            </div>
+                        </div>
                     </div>
 
                     <EditorTimeline
@@ -260,6 +377,8 @@ export default function EditorView({ clip, index, jobId, onClose, onExported }) 
                         playerRef={playerRef}
                         selectedIds={state.selectedIds}
                         onSelect={(id, multi) => dispatch({ type: 'SELECT', id, multi })}
+                        dispatch={dispatch}
+                        sourceUrl={sourceUrl}
                     />
                 </>
             )}

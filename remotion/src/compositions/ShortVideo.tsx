@@ -1,11 +1,15 @@
 import React from "react";
-import { AbsoluteFill } from "remotion";
-import { Video } from "@remotion/media";
+import { AbsoluteFill, useVideoConfig } from "remotion";
+import { Video, Audio } from "@remotion/media";
 import type { ShortVideoProps } from "../lib/types";
 import { Subtitles } from "./Subtitles";
 import { HookOverlay } from "./HookOverlay";
 import { VideoEffects } from "./VideoEffects";
 import { ReframedVideo } from "./ReframedVideo";
+import { BrollLayer } from "./BrollLayer";
+import { TextOverlays } from "./TextOverlays";
+import { TransitionOverlay } from "./TransitionOverlay";
+import { remapCaptions } from "../lib/edl";
 
 /**
  * Main composition that layers all post-processing on top of the base video.
@@ -18,6 +22,16 @@ import { ReframedVideo } from "./ReframedVideo";
 export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
   const { videoUrl, sourceVideoUrl, framing, subtitles, hook, effects } =
     rawProps as unknown as ShortVideoProps;
+  const { fps } = useVideoConfig();
+
+  // Caption words are stored in ms relative to the clip start (clipInFrame).
+  // With framing v2 EDL cuts, remap them onto the output timeline and drop
+  // words whose content was cut out.
+  const effectiveSubtitles =
+    subtitles && framing
+      ? { ...subtitles, captions: remapCaptions(subtitles.captions, framing, fps) }
+      : subtitles;
+
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
       {/* Layer 1: Base video with optional zoom/color effects */}
@@ -32,11 +46,25 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
         )}
       </VideoEffects>
 
-      {/* Layer 2: Animated subtitles */}
-      {subtitles && <Subtitles config={subtitles} />}
+      {/* Layer 2: B-roll inserts (cover the base during a span) */}
+      {framing && <BrollLayer framing={framing} />}
 
-      {/* Layer 3: Hook text overlay */}
+      {/* Layer 3: Transitions (fade in/out, smooth cuts) — darkens picture */}
+      {framing && <TransitionOverlay framing={framing} />}
+
+      {/* Layer 4: Animated subtitles */}
+      {effectiveSubtitles && <Subtitles config={effectiveSubtitles} />}
+
+      {/* Layer 5: Free-positioned text overlays */}
+      {framing && <TextOverlays framing={framing} />}
+
+      {/* Layer 6: Hook text overlay */}
       {hook && <HookOverlay config={hook} />}
+
+      {/* Layer 7: Background music */}
+      {framing?.music && (
+        <Audio src={framing.music.url} volume={framing.music.volume} loop />
+      )}
     </AbsoluteFill>
   );
 };

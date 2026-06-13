@@ -596,9 +596,8 @@ class SubtitleRequest(BaseModel):
 @app.get("/api/clip/{job_id}/{clip_index}/transcript")
 async def get_clip_transcript(job_id: str, clip_index: int):
     """Return word-level captions for a specific clip, formatted for Remotion."""
-    if job_id not in jobs:
-        raise HTTPException(status_code=404, detail="Job not found")
-
+    # No in-memory job check: everything below reads from disk, and the editor
+    # must keep working for jobs that survived a backend restart.
     output_dir = os.path.join(OUTPUT_DIR, job_id)
     json_files = glob.glob(os.path.join(output_dir, "*_metadata.json"))
 
@@ -892,7 +891,7 @@ async def add_subtitles(req: SubtitleRequest):
 
 # --- Clip framing (non-destructive editor, docs/video-editor-plan.md §2) ---
 
-FRAMING_LAYOUTS = {"fill", "fit", "split", "three", "four"}
+FRAMING_LAYOUTS = {"fill", "fit", "split", "three", "four", "screenshare", "gameplay"}
 
 def _find_framing_path(job_id: str, clip_index: int) -> str:
     output_dir = os.path.join(OUTPUT_DIR, job_id)
@@ -914,7 +913,7 @@ def _validate_framing(framing: dict) -> Optional[str]:
     """Returns an error message, or None if the framing config is valid."""
     if not isinstance(framing, dict):
         return "Framing must be an object"
-    if framing.get("version") != 1:
+    if framing.get("version") not in (1, 2):
         return "Unsupported framing version"
     source = framing.get("source")
     if not isinstance(source, dict):
@@ -922,10 +921,35 @@ def _validate_framing(framing: dict) -> Optional[str]:
     for key in ("file", "fps", "width", "height", "durationFrames"):
         if key not in source:
             return f"source.{key} is required"
+
+    # v2 EDL fields: playable content = [clipInFrame, clipOutFrame] minus cuts
+    duration = source["durationFrames"]
+    clip_in = framing.get("clipInFrame", 0)
+    clip_out = framing.get("clipOutFrame", duration)
+    if not isinstance(clip_in, int) or not isinstance(clip_out, int):
+        return "clipInFrame/clipOutFrame must be integers"
+    if not (0 <= clip_in < clip_out <= duration):
+        return "clip bounds out of range"
+    cuts = framing.get("cuts", [])
+    if not isinstance(cuts, list):
+        return "cuts must be a list"
+    prev_cut_end = clip_in
+    kept = clip_out - clip_in
+    for i, cut in enumerate(cuts):
+        cs, ce = cut.get("startFrame"), cut.get("endFrame")
+        if not isinstance(cs, int) or not isinstance(ce, int) or ce <= cs:
+            return f"cuts[{i}] has an invalid frame range"
+        if cs < prev_cut_end or ce > clip_out:
+            return f"cuts[{i}] is out of order or outside the clip bounds"
+        prev_cut_end = ce
+        kept -= ce - cs
+    if kept < 2:
+        return "cuts cannot remove the entire clip"
+
     segments = framing.get("segments")
     if not isinstance(segments, list) or not segments:
         return "segments must be a non-empty list"
-    prev_end = 0
+    prev_end = clip_in
     for i, seg in enumerate(segments):
         if not isinstance(seg, dict):
             return f"segments[{i}] must be an object"
@@ -948,8 +972,29 @@ def _validate_framing(framing: dict) -> Optional[str]:
         manual = seg.get("manualCrop")
         if manual is not None and not _crop_rect_valid(manual):
             return f"segments[{i}].manualCrop is out of bounds"
+    if prev_end != clip_out:
+        return "segments must cover the clip bounds exactly"
     if not isinstance(framing.get("faceTracks"), list):
         return "faceTracks must be a list"
+
+    # Optional v2 feature payloads — light shape checks (composition tolerates
+    # missing fields, so only reject obviously malformed types)
+    for key in ("textOverlays", "broll"):
+        if key in framing and not isinstance(framing[key], list):
+            return f"{key} must be a list"
+    if len(framing.get("textOverlays", [])) > 5:
+        return "at most 5 text overlays are allowed"
+    if len(framing.get("broll", [])) > 3:
+        return "at most 3 b-roll inserts are allowed"
+    music = framing.get("music")
+    if music is not None and not isinstance(music, dict):
+        return "music must be an object or null"
+    transitions = framing.get("transitions")
+    if transitions is not None and not isinstance(transitions, dict):
+        return "transitions must be an object"
+    subtitles = framing.get("subtitles")
+    if subtitles is not None and not isinstance(subtitles, dict):
+        return "subtitles must be an object or null"
     return None
 
 @app.get("/api/clips/{job_id}/{clip_index}/framing")
@@ -1008,6 +1053,21 @@ async def apply_render(req: ApplyRenderRequest):
         job['result']['clips'][req.clip_index]['video_url'] = new_video_url
 
     return {"success": True, "new_video_url": new_video_url}
+
+@app.post("/api/clips/{job_id}/{clip_index}/audio")
+async def upload_clip_audio(job_id: str, clip_index: int, file: UploadFile = File(...)):
+    """Store an uploaded music track in the job dir for the editor (E6)."""
+    output_dir = os.path.join(OUTPUT_DIR, job_id)
+    if not os.path.isdir(output_dir):
+        raise HTTPException(status_code=404, detail="Job not found")
+    ext = os.path.splitext(file.filename or "")[1].lower() or ".mp3"
+    if ext not in (".mp3", ".m4a", ".wav", ".ogg", ".aac"):
+        raise HTTPException(status_code=400, detail="Unsupported audio format")
+    filename = f"clip_{clip_index}_music{ext}"
+    dest = os.path.join(output_dir, filename)
+    with open(dest, "wb") as out:
+        out.write(await file.read())
+    return {"url": f"/videos/{job_id}/{filename}"}
 
 class HookRequest(BaseModel):
     job_id: str
