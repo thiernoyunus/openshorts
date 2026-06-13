@@ -27,6 +27,25 @@ const EDITOR_DEV_FIXTURES = {
   },
 };
 
+/** Loads a real processed clip from the status API and opens the editor on it. */
+function EditorJobLoader({ jobId, clipIndex, onClose }) {
+  const [clip, setClip] = useState(null);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    fetch(`/api/status/${jobId}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`status ${r.status}`))))
+      .then((d) => {
+        const clips = d?.result?.clips || [];
+        if (!clips[clipIndex]) throw new Error('clip not found in job');
+        setClip(clips[clipIndex]);
+      })
+      .catch((e) => setError(e.message));
+  }, [jobId, clipIndex]);
+  if (error) return <div style={{ color: '#fff', padding: 24 }}>Failed to load clip: {error}</div>;
+  if (!clip) return <div style={{ color: '#fff', padding: 24 }}>Loading clip…</div>;
+  return <EditorView clip={clip} index={clipIndex} jobId={jobId} onClose={onClose} />;
+}
+
 function Root() {
   const resolveView = () => {
     const hash = window.location.hash;
@@ -49,13 +68,25 @@ function Root() {
     setView('app');
   };
 
-  const editorDevMode = new URLSearchParams(window.location.search).get('editorDev');
+  const params = new URLSearchParams(window.location.search);
+  const editorDevMode = params.get('editorDev');
   if (editorDevMode) {
     return (
       <EditorView
         clip={EDITOR_DEV_FIXTURES[editorDevMode] || EDITOR_DEV_FIXTURES.static}
         index={0}
         jobId="dev"
+        onClose={() => window.location.assign(window.location.pathname)}
+      />
+    );
+  }
+  // Open the editor on a real processed clip: /?editorJob=<jobId>&clip=<index>
+  const editorJob = params.get('editorJob');
+  if (editorJob) {
+    return (
+      <EditorJobLoader
+        jobId={editorJob}
+        clipIndex={Number(params.get('clip') || 0)}
         onClose={() => window.location.assign(window.location.pathname)}
       />
     );
