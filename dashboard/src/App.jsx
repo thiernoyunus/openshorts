@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, FileVideo, Sparkles, Scissors, Youtube, Instagram, Share2, LogOut, ChevronDown, Check, Activity, LayoutDashboard, Settings, PlusCircle, History, Menu, X, Terminal, Shield, LayoutGrid, Image, Globe, RotateCcw, Calendar, AlertTriangle, KeyRound, Bot, Users, Smartphone, ExternalLink, Copy, CheckCircle2 } from 'lucide-react';
+import { Upload, FileVideo, Sparkles, Scissors, Youtube, Instagram, Share2, LogOut, ChevronDown, Check, Activity, LayoutDashboard, Settings, PlusCircle, History, Menu, X, Terminal, Shield, LayoutGrid, Image, Globe, RotateCcw, Calendar, AlertTriangle, KeyRound, Bot, Users, Smartphone, ExternalLink, Copy, CheckCircle2, Trash2 } from 'lucide-react';
 import KeyInput from './components/KeyInput';
 import MediaInput from './components/MediaInput';
 import ResultCard from './components/ResultCard';
@@ -10,7 +10,7 @@ import UGCGallery from './components/UGCGallery';
 import ScheduleWeekModal from './components/ScheduleWeekModal';
 import ProcessingModal from './components/ProcessingModal';
 import EditorView from './components/editor/EditorView';
-import { getProjects, addProject, updateProject, phaseFromLogs, titleFromPayload, thumbFromPayload, coverFromString, fetchVideoTitle, captureVideoFrame } from './lib/projectHistory';
+import { getProjects, addProject, updateProject, removeProject, phaseFromLogs, titleFromPayload, thumbFromPayload, coverFromString, fetchVideoTitle, captureVideoFrame } from './lib/projectHistory';
 import { getApiUrl } from './config';
 
 // Enhanced "Encryption" using XOR + Base64 with a Salt
@@ -509,8 +509,14 @@ function App() {
     const failed = p.status === 'failed';
     const phase = isActive ? phaseFromLogs(logs) : 'Processing';
     const cover = p.thumb || coverFromString(p.src || p.title);
+    const handleDelete = (e) => {
+      e.stopPropagation();
+      if (!window.confirm(`Delete "${p.title}"? This removes it from your recent projects.`)) return;
+      setProjects(removeProject(p.id));
+    };
     return (
-      <button onClick={() => openProject(p)} className="text-left group">
+      <div className="text-left group relative">
+        <button onClick={() => openProject(p)} className="text-left w-full block">
         <div className="relative aspect-video rounded-lg overflow-hidden bg-black border border-edge flex items-center justify-center">
           {cover ? (
             <img src={cover} alt="" className="absolute inset-0 w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
@@ -542,7 +548,16 @@ function App() {
             )}
           </div>
         </div>
-      </button>
+        </button>
+        <button
+          onClick={handleDelete}
+          title="Delete project"
+          aria-label="Delete project"
+          className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 border border-edge text-muted opacity-0 group-hover:opacity-100 hover:text-red-400 hover:border-red-400/50 transition-all"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
     );
   };
 
