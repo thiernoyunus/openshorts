@@ -1393,7 +1393,15 @@ if __name__ == '__main__':
                     '-c:a', 'aac',
                     clip_source_path
                 ]
-                subprocess.run(padded_cut_command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                padded_result = subprocess.run(padded_cut_command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+
+                # If the padded cut failed, fall back to keeping the unpadded
+                # cut as the editor source (no extend headroom, offset 0) so a
+                # valid _source.mp4 always exists for the framing coordinates.
+                if padded_result.returncode != 0 or not os.path.exists(clip_source_path) or os.path.getsize(clip_source_path) == 0:
+                    print(f"   ⚠️  Padded source cut failed for clip {i+1}; using unpadded cut as editor source.")
+                    shutil.copyfile(clip_cut_path, clip_source_path)
+                    pad_start = start  # offset collapses to 0
 
                 framing_source_override = None
                 if os.path.exists(clip_source_path):

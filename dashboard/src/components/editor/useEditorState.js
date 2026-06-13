@@ -195,7 +195,9 @@ export const editorReducer = (state, action) => {
             // the clicked person
             const segments = state.framing.segments.map((s) => {
                 if (s.id !== action.segmentId) return s;
-                if (['split', 'three', 'four'].includes(s.layout) && !s.manualCrop) {
+                // Multi-panel + screenshare/gameplay reassign the clicked panel
+                // in place; only true single-crop layouts convert to a tracked fill
+                if (['split', 'three', 'four', 'screenshare', 'gameplay'].includes(s.layout) && !s.manualCrop) {
                     const faceIds = [...(s.trackedFaceIds || [])];
                     faceIds[action.panelIdx] = action.trackId;
                     return { ...s, trackedFaceIds: faceIds };

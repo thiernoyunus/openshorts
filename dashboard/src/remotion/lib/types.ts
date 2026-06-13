@@ -249,10 +249,46 @@ export const framingSegmentSchema = z.object({
   id: z.string(),
   startFrame: z.number().int().min(0),
   endFrame: z.number().int().positive(),
-  layout: z.enum(["fill", "fit", "split", "three", "four"]),
+  layout: z.enum(["fill", "fit", "split", "three", "four", "screenshare", "gameplay"]),
   trackedFaceIds: z.array(z.number().int()),
   cameraKeyframes: z.array(cameraKeyframeSchema),
   manualCrop: cropRectSchema.nullable(),
+});
+
+export const sourceCutSchema = z.object({
+  startFrame: z.number().int().min(0),
+  endFrame: z.number().int().positive(),
+});
+
+export const textOverlaySchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  startFrame: z.number().int().min(0),
+  endFrame: z.number().int().positive(),
+  x: z.number(),
+  y: z.number(),
+  size: z.enum(["S", "M", "L"]),
+  color: z.string(),
+  bg: z.boolean(),
+});
+
+export const musicConfigSchema = z.object({
+  url: z.string(),
+  volume: z.number().min(0).max(1),
+  originalVolume: z.number().min(0).max(1),
+});
+
+export const transitionsConfigSchema = z.object({
+  fadeIn: z.boolean(),
+  fadeOut: z.boolean(),
+  cutCrossfade: z.boolean(),
+});
+
+export const brollItemSchema = z.object({
+  id: z.string(),
+  url: z.string(),
+  startFrame: z.number().int().min(0),
+  endFrame: z.number().int().positive(),
 });
 
 export const framingConfigSchema = z.object({
@@ -266,6 +302,15 @@ export const framingConfigSchema = z.object({
   }),
   segments: z.array(framingSegmentSchema),
   faceTracks: z.array(faceTrackSchema),
+  // v2 EDL + feature payloads — optional so v1 files still validate
+  clipInFrame: z.number().int().min(0).optional(),
+  clipOutFrame: z.number().int().positive().optional(),
+  cuts: z.array(sourceCutSchema).optional(),
+  subtitles: subtitleConfigSchema.nullable().optional(),
+  textOverlays: z.array(textOverlaySchema).optional(),
+  music: musicConfigSchema.nullable().optional(),
+  transitions: transitionsConfigSchema.optional(),
+  broll: z.array(brollItemSchema).optional(),
 });
 
 export const shortVideoPropsSchema = z.object({
