@@ -1,11 +1,14 @@
 import React from "react";
 import { AbsoluteFill, useVideoConfig } from "remotion";
-import { Video } from "@remotion/media";
+import { Video, Audio } from "@remotion/media";
 import type { ShortVideoProps } from "../lib/types";
 import { Subtitles } from "./Subtitles";
 import { HookOverlay } from "./HookOverlay";
 import { VideoEffects } from "./VideoEffects";
 import { ReframedVideo } from "./ReframedVideo";
+import { BrollLayer } from "./BrollLayer";
+import { TextOverlays } from "./TextOverlays";
+import { TransitionOverlay } from "./TransitionOverlay";
 import { remapCaptions } from "../lib/edl";
 
 /**
@@ -43,11 +46,25 @@ export const ShortVideo: React.FC<Record<string, unknown>> = (rawProps) => {
         )}
       </VideoEffects>
 
-      {/* Layer 2: Animated subtitles */}
+      {/* Layer 2: B-roll inserts (cover the base during a span) */}
+      {framing && <BrollLayer framing={framing} />}
+
+      {/* Layer 3: Transitions (fade in/out, smooth cuts) — darkens picture */}
+      {framing && <TransitionOverlay framing={framing} />}
+
+      {/* Layer 4: Animated subtitles */}
       {effectiveSubtitles && <Subtitles config={effectiveSubtitles} />}
 
-      {/* Layer 3: Hook text overlay */}
+      {/* Layer 5: Free-positioned text overlays */}
+      {framing && <TextOverlays framing={framing} />}
+
+      {/* Layer 6: Hook text overlay */}
       {hook && <HookOverlay config={hook} />}
+
+      {/* Layer 7: Background music */}
+      {framing?.music && (
+        <Audio src={framing.music.url} volume={framing.music.volume} loop />
+      )}
     </AbsoluteFill>
   );
 };

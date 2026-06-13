@@ -157,6 +157,38 @@ export const editorReducer = (state, action) => {
             if (cuts.length === state.framing.cuts.length) return state;
             return withHistory({ ...state.framing, cuts });
         }
+        case 'SET_TRANSITIONS':
+            return withHistory({ ...state.framing, transitions: { ...state.framing.transitions, ...action.patch } });
+        case 'SET_MUSIC':
+            return withHistory({ ...state.framing, music: action.music });
+        case 'ADD_TEXT_OVERLAY': {
+            if ((state.framing.textOverlays || []).length >= 5) return state;
+            return withHistory({
+                ...state.framing,
+                textOverlays: [...(state.framing.textOverlays || []), action.overlay],
+            });
+        }
+        case 'UPDATE_TEXT_OVERLAY':
+            return withHistory({
+                ...state.framing,
+                textOverlays: state.framing.textOverlays.map((o) =>
+                    o.id === action.id ? { ...o, ...action.patch } : o
+                ),
+            });
+        case 'REMOVE_TEXT_OVERLAY':
+            return withHistory({
+                ...state.framing,
+                textOverlays: state.framing.textOverlays.filter((o) => o.id !== action.id),
+            });
+        case 'ADD_BROLL': {
+            if ((state.framing.broll || []).length >= 3) return state;
+            return withHistory({ ...state.framing, broll: [...(state.framing.broll || []), action.item] });
+        }
+        case 'REMOVE_BROLL':
+            return withHistory({
+                ...state.framing,
+                broll: state.framing.broll.filter((b) => b.id !== action.id),
+            });
         case 'TRACK_PERSON': {
             // Tracker click: in multi-panel layouts, reassign the clicked
             // panel; otherwise (fill/fit/manual) become a fill that follows
@@ -237,7 +269,21 @@ export function tracksInSegment(framing, segment) {
 }
 
 /** Panels per layout — keep in sync with ReframedVideo.tsx panelsForLayout. */
-export const LAYOUT_PANELS = { fill: 1, fit: 1, split: 2, three: 3, four: 4 };
+export const LAYOUT_PANELS = { fill: 1, fit: 1, split: 2, three: 3, four: 4, screenshare: 1, gameplay: 1 };
+
+/**
+ * Absolute panel indices that hold a tracked face (the rest are content/screen
+ * capture panels). Must match panelsForLayout in ReframedVideo.tsx.
+ */
+export const FACE_PANEL_INDICES = {
+    fill: [0],
+    fit: [],
+    split: [0, 1],
+    three: [0, 1, 2],
+    four: [0, 1, 2, 3],
+    screenshare: [1], // panel 0 = screen, panel 1 = speaker
+    gameplay: [0], // panel 0 = speaker, panel 1 = gameplay
+};
 
 /**
  * Regenerate fill-layout camera keyframes by following one face track through
@@ -312,23 +358,42 @@ export function normalizeFraming(framing) {
     };
 }
 
-/** Default caption styling for newly enabled captions (Opus-like pop style). */
+const CAPTION_DEFAULT_KEY = 'openshorts_caption_style_default';
+
+const BUILTIN_CAPTION_STYLE = {
+    position: 'bottom',
+    style: {
+        fontFamily: 'Inter',
+        fontSize: 52,
+        fontColor: '#FFFFFF',
+        highlightColor: '#FFDD00',
+        borderColor: '#000000',
+        borderWidth: 3,
+        bgColor: '#000000',
+        bgOpacity: 0,
+        animation: 'pop',
+    },
+};
+
+/** Persist the current caption style+position as the user's default (E9, brand-template slice). */
+export function saveDefaultCaptionStyle(position, style) {
+    try {
+        localStorage.setItem(CAPTION_DEFAULT_KEY, JSON.stringify({ position, style }));
+    } catch { /* storage unavailable */ }
+}
+
+function loadDefaultCaptionStyle() {
+    try {
+        const raw = localStorage.getItem(CAPTION_DEFAULT_KEY);
+        if (raw) return JSON.parse(raw);
+    } catch { /* ignore */ }
+    return BUILTIN_CAPTION_STYLE;
+}
+
+/** Default caption styling for newly enabled captions (user default or built-in). */
 export function defaultSubtitleConfig(captions) {
-    return {
-        captions,
-        position: 'bottom',
-        style: {
-            fontFamily: 'Inter',
-            fontSize: 52,
-            fontColor: '#FFFFFF',
-            highlightColor: '#FFDD00',
-            borderColor: '#000000',
-            borderWidth: 3,
-            bgColor: '#000000',
-            bgOpacity: 0,
-            animation: 'pop',
-        },
-    };
+    const { position, style } = loadDefaultCaptionStyle();
+    return { captions, position, style };
 }
 
 /** Caption style presets surfaced in the Captions tab. */

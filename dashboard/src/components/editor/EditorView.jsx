@@ -1,14 +1,27 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Loader2, AlertCircle, LayoutGrid, Captions, Crosshair } from 'lucide-react';
+import { Loader2, AlertCircle, LayoutGrid, Captions, Crosshair, Sparkles, Type, Music, Clapperboard } from 'lucide-react';
 import { getApiUrl } from '../../config';
 import useEditorState, { defaultSubtitleConfig } from './useEditorState';
-import { outputDurationFrames } from '../../remotion/lib/edl';
+import { outputDurationFrames, outputToSource } from '../../remotion/lib/edl';
 import EditorTopBar from './EditorTopBar';
 import EditorCanvas, { EDITOR_FPS } from './EditorCanvas';
 import EditorTimeline from './EditorTimeline';
 import LayoutPanel from './LayoutPanel';
 import TranscriptPanel from './TranscriptPanel';
 import CaptionsPanel from './CaptionsPanel';
+import TransitionsPanel from './TransitionsPanel';
+import TextPanel from './TextPanel';
+import AudioPanel from './AudioPanel';
+import BrollPanel from './BrollPanel';
+
+const TABS = [
+    { id: 'layout', label: 'Layout', icon: LayoutGrid },
+    { id: 'captions', label: 'Captions', icon: Captions },
+    { id: 'text', label: 'Text', icon: Type },
+    { id: 'audio', label: 'Audio', icon: Music },
+    { id: 'broll', label: 'B-Roll', icon: Clapperboard },
+    { id: 'transitions', label: 'Effects', icon: Sparkles },
+];
 
 /**
  * Full-screen clip editor (docs/video-editor-plan.md Phases 3-6).
@@ -228,6 +241,12 @@ export default function EditorView({ clip, index, jobId, onClose, onExported }) 
     const framing = state.framing;
     const durationInFrames = framing ? outputDurationFrames(framing, EDITOR_FPS) : 1;
 
+    // Current playhead in SOURCE frames — for inserting text/b-roll at the playhead
+    const getCurrentSourceFrame = useCallback(
+        () => (framing ? outputToSource(framing, playerRef.current?.getCurrentFrame() ?? 0, EDITOR_FPS) : 0),
+        [framing]
+    );
+
     const title =
         clip.video_title_for_youtube_short || `Clip ${typeof index === 'number' ? index + 1 : ''}`;
 
@@ -307,40 +326,47 @@ export default function EditorView({ clip, index, jobId, onClose, onExported }) 
                             </div>
                         </div>
 
-                        {/* Tool rail with tabs */}
-                        <div className="w-[250px] shrink-0 border-l border-edge bg-surface flex flex-col min-h-0">
-                            <div className="flex border-b border-edge shrink-0">
-                                {[
-                                    { id: 'layout', label: 'Layout', icon: LayoutGrid },
-                                    { id: 'captions', label: 'Captions', icon: Captions },
-                                ].map((tab) => (
+                        {/* Tool rail with icon tabs */}
+                        <div className="w-[260px] shrink-0 border-l border-edge bg-surface flex flex-col min-h-0">
+                            <div className="grid grid-cols-6 border-b border-edge shrink-0">
+                                {TABS.map((tab) => (
                                     <button
                                         key={tab.id}
                                         onClick={() => setActiveTab(tab.id)}
-                                        className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-medium transition-colors ${
+                                        title={tab.label}
+                                        className={`flex flex-col items-center gap-0.5 py-2 text-[9px] font-medium transition-colors ${
                                             activeTab === tab.id
                                                 ? 'text-fg border-b-2 border-fg -mb-px'
                                                 : 'text-muted hover:text-fg'
                                         }`}
                                     >
-                                        <tab.icon size={13} /> {tab.label}
+                                        <tab.icon size={14} /> {tab.label}
                                     </button>
                                 ))}
                             </div>
                             <div className="flex-1 overflow-y-auto custom-scrollbar">
-                                {activeTab === 'layout' ? (
+                                {activeTab === 'layout' && (
                                     <LayoutPanel
                                         framing={framing}
                                         selectedIds={state.selectedIds}
                                         dispatch={dispatch}
                                         sourceUrl={sourceUrl}
                                     />
-                                ) : (
-                                    <CaptionsPanel
-                                        framing={framing}
-                                        captions={captions}
-                                        dispatch={dispatch}
-                                    />
+                                )}
+                                {activeTab === 'captions' && (
+                                    <CaptionsPanel framing={framing} captions={captions} dispatch={dispatch} />
+                                )}
+                                {activeTab === 'text' && (
+                                    <TextPanel framing={framing} dispatch={dispatch} getCurrentSourceFrame={getCurrentSourceFrame} />
+                                )}
+                                {activeTab === 'audio' && (
+                                    <AudioPanel framing={framing} jobId={jobId} clipIndex={index} dispatch={dispatch} />
+                                )}
+                                {activeTab === 'broll' && (
+                                    <BrollPanel framing={framing} dispatch={dispatch} getCurrentSourceFrame={getCurrentSourceFrame} />
+                                )}
+                                {activeTab === 'transitions' && (
+                                    <TransitionsPanel framing={framing} dispatch={dispatch} />
                                 )}
                             </div>
                         </div>

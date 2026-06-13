@@ -147,6 +147,8 @@ interface PanelRect {
   top: number;
   width: number;
   height: number;
+  /** Screen/gameplay capture panel: show the whole frame (contain), not a face crop. */
+  content?: boolean;
 }
 
 /** Panel grid per layout for a canvas of width x height px. */
@@ -173,6 +175,18 @@ export const panelsForLayout = (
         { left: width / 2, top: 0, width: width / 2, height: height / 2 },
         { left: 0, top: height / 2, width: width / 2, height: height / 2 },
         { left: width / 2, top: height / 2, width: width / 2, height: height / 2 },
+      ];
+    case "screenshare":
+      // screen capture on top 60%, speaker bottom 40%
+      return [
+        { left: 0, top: 0, width, height: height * 0.6, content: true },
+        { left: 0, top: height * 0.6, width, height: height * 0.4 },
+      ];
+    case "gameplay":
+      // speaker top 30%, gameplay bottom 70%
+      return [
+        { left: 0, top: 0, width, height: height * 0.3 },
+        { left: 0, top: height * 0.3, width, height: height * 0.7, content: true },
       ];
     default:
       return [{ left: 0, top: 0, width, height }];
@@ -223,6 +237,47 @@ const CroppedVideo: React.FC<{
           position: "absolute",
           left: offsetX,
           top: offsetY,
+          width: videoW,
+          height: videoH,
+          maxWidth: "none",
+          maxHeight: "none",
+        }}
+      />
+    </div>
+  );
+};
+
+/** Whole source frame fit (contained) inside a panel — for screen/gameplay capture. */
+const ContentPanel: React.FC<{
+  src: string;
+  panel: PanelRect;
+  srcW: number;
+  srcH: number;
+  trimBefore: number;
+}> = ({ src, panel, srcW, srcH, trimBefore }) => {
+  const scale = Math.min(panel.width / srcW, panel.height / srcH);
+  const videoW = srcW * scale;
+  const videoH = srcH * scale;
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: panel.left,
+        top: panel.top,
+        width: panel.width,
+        height: panel.height,
+        overflow: "hidden",
+        backgroundColor: "#000",
+      }}
+    >
+      <Video
+        src={src}
+        muted
+        trimBefore={trimBefore}
+        style={{
+          position: "absolute",
+          left: (panel.width - videoW) / 2,
+          top: (panel.height - videoH) / 2,
           width: videoW,
           height: videoH,
           maxWidth: "none",
@@ -357,11 +412,26 @@ const RangeContent: React.FC<{
     );
   }
 
-  // Multi-panel layouts: split / three / four / screenshare / gameplay
+  // Multi-panel layouts: split / three / four / screenshare / gameplay.
+  // Content panels (screen/gameplay capture) show the whole frame; the first
+  // non-content panel carries audio.
   const panels = panelsForLayout(segment.layout, width, height);
+  const firstFacePanel = panels.findIndex((p) => !p.content);
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
       {panels.map((panel, i) => {
+        if (panel.content) {
+          return (
+            <ContentPanel
+              key={i}
+              src={src}
+              panel={panel}
+              srcW={source.width}
+              srcH={source.height}
+              trimBefore={trimBefore}
+            />
+          );
+        }
         const trackId = segment.trackedFaceIds[i];
         const track = faceTracks.find((t) => t.id === trackId);
         const face = smoothedFaceRect(track, sourceFrame);
@@ -377,7 +447,7 @@ const RangeContent: React.FC<{
             panel={panel}
             srcW={source.width}
             srcH={source.height}
-            muted={i !== 0} // only the first panel carries audio
+            muted={i !== firstFacePanel} // first face panel carries audio
             trimBefore={trimBefore}
             volume={originalVolume}
           />

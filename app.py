@@ -891,7 +891,7 @@ async def add_subtitles(req: SubtitleRequest):
 
 # --- Clip framing (non-destructive editor, docs/video-editor-plan.md §2) ---
 
-FRAMING_LAYOUTS = {"fill", "fit", "split", "three", "four"}
+FRAMING_LAYOUTS = {"fill", "fit", "split", "three", "four", "screenshare", "gameplay"}
 
 def _find_framing_path(job_id: str, clip_index: int) -> str:
     output_dir = os.path.join(OUTPUT_DIR, job_id)
@@ -976,6 +976,25 @@ def _validate_framing(framing: dict) -> Optional[str]:
         return "segments must cover the clip bounds exactly"
     if not isinstance(framing.get("faceTracks"), list):
         return "faceTracks must be a list"
+
+    # Optional v2 feature payloads — light shape checks (composition tolerates
+    # missing fields, so only reject obviously malformed types)
+    for key in ("textOverlays", "broll"):
+        if key in framing and not isinstance(framing[key], list):
+            return f"{key} must be a list"
+    if len(framing.get("textOverlays", [])) > 5:
+        return "at most 5 text overlays are allowed"
+    if len(framing.get("broll", [])) > 3:
+        return "at most 3 b-roll inserts are allowed"
+    music = framing.get("music")
+    if music is not None and not isinstance(music, dict):
+        return "music must be an object or null"
+    transitions = framing.get("transitions")
+    if transitions is not None and not isinstance(transitions, dict):
+        return "transitions must be an object"
+    subtitles = framing.get("subtitles")
+    if subtitles is not None and not isinstance(subtitles, dict):
+        return "subtitles must be an object or null"
     return None
 
 @app.get("/api/clips/{job_id}/{clip_index}/framing")
@@ -1034,6 +1053,21 @@ async def apply_render(req: ApplyRenderRequest):
         job['result']['clips'][req.clip_index]['video_url'] = new_video_url
 
     return {"success": True, "new_video_url": new_video_url}
+
+@app.post("/api/clips/{job_id}/{clip_index}/audio")
+async def upload_clip_audio(job_id: str, clip_index: int, file: UploadFile = File(...)):
+    """Store an uploaded music track in the job dir for the editor (E6)."""
+    output_dir = os.path.join(OUTPUT_DIR, job_id)
+    if not os.path.isdir(output_dir):
+        raise HTTPException(status_code=404, detail="Job not found")
+    ext = os.path.splitext(file.filename or "")[1].lower() or ".mp3"
+    if ext not in (".mp3", ".m4a", ".wav", ".ogg", ".aac"):
+        raise HTTPException(status_code=400, detail="Unsupported audio format")
+    filename = f"clip_{clip_index}_music{ext}"
+    dest = os.path.join(output_dir, filename)
+    with open(dest, "wb") as out:
+        out.write(await file.read())
+    return {"url": f"/videos/{job_id}/{filename}"}
 
 class HookRequest(BaseModel):
     job_id: str

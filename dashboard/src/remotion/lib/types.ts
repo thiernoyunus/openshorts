@@ -61,7 +61,14 @@ export interface EffectsConfig {
 // --- Framing config (non-destructive reframing, schema: docs/video-editor-plan.md §2) ---
 // All coordinates are normalized 0-1 relative to the SOURCE video frame.
 // All frame numbers are in SOURCE fps (framing.source.fps), not composition fps.
-export type FramingLayout = "fill" | "fit" | "split" | "three" | "four";
+export type FramingLayout =
+  | "fill"
+  | "fit"
+  | "split"
+  | "three"
+  | "four"
+  | "screenshare"
+  | "gameplay";
 
 export interface CropRect {
   x: number;

@@ -1,6 +1,6 @@
-import React from 'react';
-import { Type } from 'lucide-react';
-import { defaultSubtitleConfig, CAPTION_PRESETS } from './useEditorState';
+import React, { useState } from 'react';
+import { Type, Bookmark, Check } from 'lucide-react';
+import { defaultSubtitleConfig, CAPTION_PRESETS, saveDefaultCaptionStyle } from './useEditorState';
 
 const POSITIONS = ['top', 'middle', 'bottom'];
 const ANIMATIONS = ['none', 'word-highlight', 'pop', 'karaoke'];
@@ -14,6 +14,7 @@ const HIGHLIGHTS = ['#FFDD00', '#3dd68c', '#FF5C5C', '#5CA8FF', '#FFFFFF'];
  */
 export default function CaptionsPanel({ framing, captions, dispatch }) {
     const subs = framing.subtitles || null;
+    const [savedDefault, setSavedDefault] = useState(false);
 
     const setStyle = (patch) =>
         dispatch({
@@ -145,6 +146,19 @@ export default function CaptionsPanel({ framing, captions, dispatch }) {
                             ))}
                         </div>
                     </div>
+
+                    {/* Save current style as the default for future clips (E9) */}
+                    <button
+                        onClick={() => {
+                            saveDefaultCaptionStyle(subs.position, subs.style);
+                            setSavedDefault(true);
+                            setTimeout(() => setSavedDefault(false), 2000);
+                        }}
+                        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-edge bg-surface2/50 text-fg text-[11px] font-medium hover:bg-white/5 transition-colors"
+                    >
+                        {savedDefault ? <Check size={13} className="text-viral" /> : <Bookmark size={13} />}
+                        {savedDefault ? 'Saved as default' : 'Set as default style'}
+                    </button>
                 </div>
             )}
         </div>
